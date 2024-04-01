@@ -1,15 +1,23 @@
 # PyThrottler
 
+pythrottler is an intuitive throttler that supports various backends and throttling algorihms, it can be used in distributed application for throttling web-api and any regular function.
+
 - [PyThrottler](#pythrottler)
+  - [Feature](#feature)
   - [Usage](#usage)
+  - [Install](#install)
   - [Advanced Usage](#advanced-usage)
     - [Keyspace](#keyspace)
-  - [Install](#install)
   - [Supported Backend](#supported-backend)
   - [Supported Algorithms](#supported-algorithms)
   - [requirements](#requirements)
 
-an intuitive throttler supports various backends and throttling algorihms
+## Feature
+
+- Distributed throttling via redis or other backend.
+- Support asyncio mode
+- Support various throttling algorithms
+- Designed to be highly customizable and extensible.
 
 ## Usage
 
@@ -22,6 +30,12 @@ from pythrottler import limits, throttler, ThrottleAlgo
 def add(a: int, b: int) -> int:
     res = a + b
     return res
+```
+
+## Install
+
+```bash
+pip install pythrottler
 ```
 
 ## Advanced Usage
@@ -41,11 +55,7 @@ where:
 | funcname | name of the function | func.\_\_name__ |
 | algorithm | throttling algorithm of the function | fixed_window |
 
-## Install
 
-```bash
-pip install pythrottler
-```
 
 2; config throttler when app starts
 

@@ -21,7 +21,7 @@ pythrottler is an intuitive throttler that supports various backends and throttl
 
 ## Usage
 
-1; decorate functions to be throttled
+1. decorate functions to be throttled
 
 ```python
 from pythrottler import limits, throttler, ThrottleAlgo
@@ -32,7 +32,7 @@ def add(a: int, b: int) -> int:
     return res
 ```
 
-2; config throttler when app starts
+2. config throttler when app starts
 
 ```python
 redis = Redis.from_url("redis://@127.0.0.1:6379/0")

@@ -1,7 +1,7 @@
 import typing as ty
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import Enum, auto
+from enum import Enum, EnumMeta, auto
 
 _K = ty.TypeVar("_K", str, bytes)
 _V = ty.TypeVar("_V")
@@ -63,7 +63,12 @@ class Duration:
         return total
 
 
-class ThrottleAlgo(str, Enum):
+class AlgoTypeEnum(Enum):
+    def _generate_next_value_(name: str, _, __, ___):
+        return name.lower()  # type: ignore
+
+
+class ThrottleAlgo(str, AlgoTypeEnum):
     TOKEN_BUCKET = auto()
     LEAKY_BUCEKT = auto()
     FIXED_WINDOW = auto()

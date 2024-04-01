@@ -1,5 +1,14 @@
 # PyThrottler
 
+- [PyThrottler](#pythrottler)
+  - [Usage](#usage)
+  - [Advanced Usage](#advanced-usage)
+    - [Keyspace](#keyspace)
+  - [Install](#install)
+  - [Supported Backend](#supported-backend)
+  - [Supported Algorithms](#supported-algorithms)
+  - [requirements](#requirements)
+
 an intuitive throttler supports various backends and throttling algorihms
 
 ## Usage
@@ -14,6 +23,23 @@ def add(a: int, b: int) -> int:
     res = a + b
     return res
 ```
+
+## Advanced Usage
+
+### Keyspace
+
+by default, pythrottler creates keyspace of this format for throttled functions
+
+{keyspace}:{module}:{funcname}:{algorithm}
+
+where:
+
+| name | explain | default |
+| -  | -  | -|
+| keyspace | customized string provided by user | "" |
+| module | module name where function is defined in | func.\_\_module__ |
+| funcname | name of the function | func.\_\_name__ |
+| algorithm | throttling algorithm of the function | fixed_window |
 
 ## Install
 

@@ -46,16 +46,12 @@ by default, pythrottler creates keyspace of this format for throttled functions
 
 {keyspace}:{module}:{funcname}:{algorithm}
 
-where:
-
 | name | explain | default |
 | -  | -  | -|
 | keyspace | customized string provided by user | "" |
 | module | module name where function is defined in | func.\_\_module__ |
 | funcname | name of the function | func.\_\_name__ |
 | algorithm | throttling algorithm of the function | fixed_window |
-
-
 
 2; config throttler when app starts
 
@@ -66,19 +62,19 @@ throttler.config(quota_counter=RedisCounter(redis=redis))
 
 ## Supported Backend
 
-| backend | supported|
-| - | - |
-| redis | True|
-| memory | True|
+| backend | sync | async |
+| - | - | - |
+| redis | supported | supported |
+| memory | supported | supported |
 
 ## Supported Algorithms
 
-| algorithm | supported |
+| algorithm | status |
 | - | -|
-| fixed window | True |
-| sliding window | True |
-| leaky bucket | True |
-| token bucket | True |
+| fixed window | supported |
+| sliding window | supported |
+| leaky bucket | supported |
+| token bucket | supported |
 
 ## requirements
 

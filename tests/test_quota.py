@@ -20,7 +20,7 @@ redis = Redis.from_url(url)
 
 
 async def test_throttle_raise_error():
-    throttler.config(quota_counter=MemoryCounter())
+    throttler.config(counter=MemoryCounter())
     quota = 3
 
     @limits(quota=quota, duration_s=5)

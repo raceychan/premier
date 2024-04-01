@@ -22,19 +22,28 @@ class _Throttler:
     def __init__(
         self,
         counter: QuotaCounter | None = None,
-        default_algo: ThrottleAlgo = ThrottleAlgo.FIXED_WINDOW,
+        *,
+        algo: ThrottleAlgo = ThrottleAlgo.FIXED_WINDOW,
         keyspace: str = "",
     ):
 
         self._counter = counter
         # === config ===
-        self._algo = default_algo
+        self._algo = algo
         self._keyspace = keyspace
         # === config ===
         self.__ready = False
 
-    def config(self, quota_counter: QuotaCounter):
-        self._counter = quota_counter
+    def config(
+        self,
+        counter: QuotaCounter,
+        *,
+        algo: ThrottleAlgo = ThrottleAlgo.FIXED_WINDOW,
+        keyspace: str = "",
+    ):
+        self._counter = counter
+        self._algo = algo
+        self._keyspace = keyspace
         self.__ready = True
 
     def register(self, key: str, quota: int, duration: Duration, algo: ThrottleAlgo):

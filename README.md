@@ -32,6 +32,18 @@ def add(a: int, b: int) -> int:
     return res
 ```
 
+2; config throttler when app starts
+
+```python
+redis = Redis.from_url("redis://@127.0.0.1:6379/0")
+throttler.config(
+    quota_counter=RedisCounter(redis=redis, ex_s=15), # set key expirey to 15 seconds
+    algo=ThrottleAlgo.FIXED_WINDOW,# use fix window as the default throttling algorithm
+    keyspace="pythrottler", # set pythrottler as the keyspace
+)
+
+```
+
 ## Install
 
 ```bash
@@ -53,12 +65,7 @@ by default, pythrottler creates keyspace of this format for throttled functions
 | funcname | name of the function | func.\_\_name__ |
 | algorithm | throttling algorithm of the function | fixed_window |
 
-2; config throttler when app starts
 
-```python
-redis = Redis.from_url("redis://@127.0.0.1:6379/0")
-throttler.config(quota_counter=RedisCounter(redis=redis))
-```
 
 ## Supported Backend
 

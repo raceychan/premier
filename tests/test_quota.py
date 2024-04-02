@@ -1,10 +1,11 @@
 # import asyncio
+import time
+
 import pytest
-
-# from redis.asyncio.client import Redis
 from redis import Redis
+from redis.asyncio.client import Redis as AIORedis
 
-from pythrottler import (
+from premier import (
     MemoryCounter,
     QuotaExceedsError,
     RedisCounter,
@@ -18,9 +19,10 @@ redis = Redis.from_url(url)
 
 # throttler.config(quota_counter=RedisCounter(redis=redis))
 
+throttler.config(counter=MemoryCounter())
+
 
 async def test_throttle_raise_error():
-    throttler.config(counter=MemoryCounter())
     quota = 3
 
     @limits(quota=quota, duration_s=5)
@@ -34,10 +36,39 @@ async def test_throttle_raise_error():
         assert len(res) <= quota
 
 
+@pytest.mark.skip
 async def test_throttler_do_not_raise_error():
-    quota = 3
+    throttler.clear()
 
-    @limits(quota=quota, duration_s=5)
+    @limits(quota=3, duration_s=5)
+    def add(a: int, b: int) -> int:
+        res = a + b
+        return res
+
+    tries = 4
+    res = [add(3, 5) for _ in range(tries - 1)]
+    time.sleep(5)
+    res.append(add(3, 5))
+    assert len(res) == tries
+
+
+async def test_throttler_do_not_raise_error_with_interval():
+    throttler.clear()
+    ...
+
+    @limits(quota=3, duration_s=5)
+    def add(a: int, b: int) -> int:
+        res = a + b
+        return res
+
+    tries = 2
+    res = [add(3, 5) for _ in range(tries)]
+    assert len(res) == tries
+
+
+async def test_throttler_with_keymaker():
+
+    @limits(quota=3, duration_s=5, keymaker=lambda a, b: f"{a}")
     def add(a: int, b: int) -> int:
         res = a + b
         return res

@@ -10,6 +10,7 @@ platforms = ["linux-64"]
 
 [dependencies]
 python = "==3.10"
+setuptools = ">=69.2.0,<69.3"
 
 [pypi-dependencies]
 redis = ">=5.0.3"

@@ -2,11 +2,10 @@ import typing as ty
 from time import perf_counter as clock
 from types import FunctionType, MethodType
 
-from pythrottler._types import Algorithm, QuotaCounter, ThrottleAlgo
+from premier._types import Algorithm, QuotaCounter, ThrottleAlgo
 
 
-# TODO: customer key maker, so that people could throttler function by its args and kwargs
-def key_maker(func: ty.Callable, algo: ThrottleAlgo, keyspace: str = ""):
+def func_keymaker(func: ty.Callable, algo: ThrottleAlgo, keyspace: str):
     if isinstance(func, MethodType):
         # It's a method, get its class name and method name
         class_name = func.__self__.__class__.__name__
@@ -16,7 +15,10 @@ def key_maker(func: ty.Callable, algo: ThrottleAlgo, keyspace: str = ""):
         # It's a standalone function
         fid = func.__name__
     else:
-        fid = ""
+        try:
+            fid = func.__name__
+        except AttributeError:
+            fid = ""
 
     return f"{keyspace}:{func.__module__}:{fid}:{algo.value}"
 

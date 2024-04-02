@@ -1,8 +1,8 @@
-# PyThrottler
+# premier
 
-pythrottler is an intuitive throttler that supports various backends and throttling algorihms, it can be used in distributed application for throttling web-api and any regular function.
+premier is an intuitive throttler that supports various backends and throttling algorihms, it can be used in distributed application for throttling web-api and any regular function.
 
-- [PyThrottler](#pythrottler)
+- [premier](#premier)
   - [Feature](#feature)
   - [Usage](#usage)
   - [Install](#install)
@@ -24,7 +24,7 @@ pythrottler is an intuitive throttler that supports various backends and throttl
 1. decorate functions to be throttled
 
 ```python
-from pythrottler import limits, throttler, ThrottleAlgo
+from premier import limits, throttler, ThrottleAlgo
 
 @limits(quota=quota, duration_s=5, algo=ThrottleAlgo.FIX_WINDOW)
 def add(a: int, b: int) -> int:
@@ -39,7 +39,7 @@ redis = Redis.from_url("redis://@127.0.0.1:6379/0")
 throttler.config(
     quota_counter=RedisCounter(redis=redis, ex_s=15), # set key expirey to 15 seconds
     algo=ThrottleAlgo.FIXED_WINDOW,# use fix window as the default throttling algorithm
-    keyspace="pythrottler", # set pythrottler as the keyspace
+    keyspace="premier", # set premier as the keyspace
 )
 
 ```
@@ -47,14 +47,14 @@ throttler.config(
 ## Install
 
 ```bash
-pip install pythrottler
+pip install premier
 ```
 
 ## Advanced Usage
 
 ### Keyspace
 
-by default, pythrottler creates keyspace of this format for throttled functions
+by default, premier creates keyspace of this format for throttled functions
 
 {keyspace}:{module}:{funcname}:{algorithm}
 
@@ -64,8 +64,6 @@ by default, pythrottler creates keyspace of this format for throttled functions
 | module | module name where function is defined in | func.\_\_module__ |
 | funcname | name of the function | func.\_\_name__ |
 | algorithm | throttling algorithm of the function | fixed_window |
-
-
 
 ## Supported Backend
 

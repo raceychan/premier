@@ -1,7 +1,7 @@
 import typing as ty
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import Enum, EnumMeta, auto
+from enum import Enum, auto
 
 _K = ty.TypeVar("_K", str, bytes)
 _V = ty.TypeVar("_V")
@@ -17,6 +17,10 @@ class QuotaCounter(ty.Generic[_K, _V], ABC):
 
     @abstractmethod
     def set(self, key: _K, value: _V) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def clear(self, keyspace: str = "") -> None:
         raise NotImplementedError
 
 
@@ -76,7 +80,7 @@ class ThrottleAlgo(str, AlgoTypeEnum):
 
 
 class ThrottleInfo(ty.NamedTuple):
-    key: str
+    funckey: str
     quota: int
     duration: Duration
     algorithm: ThrottleAlgo

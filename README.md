@@ -8,6 +8,7 @@ premier is an intuitive throttler that supports various backends and throttling 
   - [Install](#install)
   - [Advanced Usage](#advanced-usage)
     - [Keyspace](#keyspace)
+    - [Customized throttle key](#customized-throttle-key)
   - [Supported Backend](#supported-backend)
   - [Supported Algorithms](#supported-algorithms)
   - [requirements](#requirements)
@@ -64,6 +65,17 @@ by default, premier creates keyspace of this format for throttled functions
 | module | module name where function is defined in | func.\_\_module__ |
 | funcname | name of the function | func.\_\_name__ |
 | algorithm | throttling algorithm of the function | fixed_window |
+
+### Customized throttle key
+
+You might provide your own keymaker to the 'limits' function like this
+
+```python
+  @limits(quota=3, duration_s=5, keymaker=lambda a, b: f"{a}")
+  def add(a: int, b: int) -> int:
+      res = a + b
+      return res
+```
 
 ## Supported Backend
 

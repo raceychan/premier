@@ -3,13 +3,24 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
 
-_K = ty.TypeVar("_K", str, bytes)
+_K = ty.TypeVar("_K", bound=ty.Hashable)
 _V = ty.TypeVar("_V")
 T = ty.TypeVar("T")
 P = ty.ParamSpec("P")
-R = ty.TypeVar("R")
+R = ty.TypeVar("R", covariant=True)
 
 
+KeyMaker = ty.Callable[..., str]
+
+
+@ty.runtime_checkable
+class AnyAsyncFunc(ty.Protocol[P, R]):
+    async def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
+
+
+@ty.runtime_checkable
+class AnyFunc(ty.Protocol[P, R]):
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
 class QuotaCounter(ty.Generic[_K, _V], ABC):
     @abstractmethod
     def get(self, key: _K, default: T) -> _V | T:
@@ -21,6 +32,20 @@ class QuotaCounter(ty.Generic[_K, _V], ABC):
 
     @abstractmethod
     def clear(self, keyspace: str = "") -> None:
+        raise NotImplementedError
+
+
+class AsyncQuotaCounter(ty.Generic[_K, _V], QuotaCounter[_K, _V]):
+    @abstractmethod
+    async def get(self, key: _K, default: T) -> _V | T:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def set(self, key: _K, value: _V) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def clear(self, keyspace: str = "") -> None:
         raise NotImplementedError
 
 
@@ -74,7 +99,7 @@ class AlgoTypeEnum(Enum):
 
 class ThrottleAlgo(str, AlgoTypeEnum):
     TOKEN_BUCKET = auto()
-    LEAKY_BUCEKT = auto()
+    LEAKY_BUCKET = auto()
     FIXED_WINDOW = auto()
     SLIDING_WINDOW = auto()
 

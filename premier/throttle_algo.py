@@ -1,4 +1,7 @@
+import threading
 import typing as ty
+from collections import deque
+from time import perf_counter
 from time import perf_counter as clock
 from types import FunctionType, MethodType
 
@@ -24,10 +27,17 @@ def func_keymaker(func: ty.Callable, algo: ThrottleAlgo, keyspace: str):
 
 
 class QuotaExceedsError(Exception):
-    def __init__(self, quota: int, duration: int, next_availble: float):
+    time_remains: float
 
-        msg = f"You exceeds {quota} quota in {duration} seconds, available after {next_availble:.2f} s"
+    def __init__(self, quota: int, duration: int, time_remains: float):
+        msg = f"You exceeds {quota} quota in {duration} seconds, available after {time_remains:.2f} s"
+        self.time_remains = time_remains
         super().__init__(msg)
+
+
+class BucketFullError(QuotaExceedsError):
+    def __init__(self, msg: str):
+        self.msg = msg
 
 
 class _AlgoRegistry:
@@ -52,13 +62,12 @@ algo_registry = _AlgoRegistry()
 
 
 class FixedWindow(Algorithm):
-    def __init__(self, counter: QuotaCounter[str, tuple[float, int]]):
+    def __init__(self, counter: QuotaCounter[ty.Hashable, tuple[float, int]]):
         self._counter = counter
 
-    def _reset_window(self, key, duration):
-        self._counter.set(key, (clock() + duration, 1))
-
-    def get_token(self, key, quota: int, duration_s: int) -> ty.Literal[-1] | float:
+    def get_token(
+        self, key: ty.Hashable, quota: int, duration_s: int
+    ) -> ty.Literal[-1] | float:
         time, cnt = self._counter.get(key, (clock() + duration_s, 0))
 
         if (now := clock()) > time:
@@ -74,10 +83,12 @@ class FixedWindow(Algorithm):
 
 
 class SlidingWindow(Algorithm):
-    def __init__(self, counter: QuotaCounter[str, tuple[float, int]]):
+    def __init__(self, counter: QuotaCounter[ty.Hashable, tuple[float, int]]):
         self._counter = counter
 
-    def get_token(self, key, quota: int, duration_s: int) -> ty.Literal[-1] | float:
+    def get_token(
+        self, key: ty.Hashable, quota: int, duration_s: int
+    ) -> ty.Literal[-1] | float:
         now = clock()
         time, cnt = self._counter.get(key, (now, 0))
 
@@ -100,32 +111,92 @@ class SlidingWindow(Algorithm):
 
 
 class LeakyBucket(Algorithm):
-    def __init__(self, counter: QuotaCounter[str, float]):
+    def __init__(self, counter: QuotaCounter[ty.Hashable, tuple[float, float]]):
         self._counter = counter
 
-    def get_token(self, key, quota: int, duration_s: int) -> ty.Literal[-1] | float:
+    def get_token(
+        self, key: ty.Hashable, quota: int, duration_s: int
+    ) -> ty.Union[ty.Literal[-1], float]:
         now = clock()
-        last_leak = self._counter.get(key, now)
-        elapsed = now - last_leak
-        leak_rate = quota / duration_s  # tokens per second
+        # Get the current level of the bucket (default to 0 if key doesn't exist)
+        current_level, last_checked = self._counter.get(key, (0, now))
 
-        # Calculate the current bucket level considering the leak
-        leaked_tokens = elapsed * leak_rate
-        new_level = max(0, leaked_tokens - 1)
+        # Calculate the leaked amount since last checked
+        elapsed = now - last_checked
+        leak_rate = quota / duration_s
+        leaked_amount = elapsed * leak_rate
 
-        if new_level >= quota:
-            # Return time remaining for 1 token to leak out
-            return (1 / leak_rate) * (new_level - quota + 1)
+        # Update the current level based on the leaked amount
+        current_level = max(0, current_level - leaked_amount)
 
-        self._counter.set(key, now - (new_level / quota * duration_s))
-        return -1
+        if current_level < quota:
+            # There's room for a token, update the bucket level and timestamp
+            self._counter.set(key, (current_level + 1, now))
+            return -1  # Token is issued immediately
+
+        # Bucket is full, calculate the time until the next token can be issued
+        time_until_next_token = (current_level + 1 - quota) / leak_rate
+        return time_until_next_token
+
+
+class Bucket:
+    def __init__(self, bucket_size: int, quota: int, duration_s: int):
+        self.lock = threading.Lock()
+        self.last_execution_time = perf_counter()
+        self.bucket_size = bucket_size
+        self.leaky_rate = quota / duration_s
+        self.waiting_tasks = deque(maxlen=bucket_size)
+
+    def __call__(self, func):
+        def inner(*args, **kwargs):
+            return self.leak(func, args, kwargs)
+
+        return inner
+
+    def calculate_delay(self):
+        with self.lock:
+            now = perf_counter()
+            return max(0, 1 / self.leaky_rate - (now - self.last_execution_time))
+
+    def delayed_execution(self, func, args, kwargs):
+        try:
+            result = func(*args, **kwargs)
+        finally:
+            with self.lock:
+                self.last_execution_time = perf_counter()
+                # Ensure the timer is removed from the queue once executed
+                if self.waiting_tasks:
+                    self.waiting_tasks.popleft()
+
+    def schedule_task(self, func, delay: float, args, kwargs):
+        with self.lock:
+            if len(self.waiting_tasks) >= self.bucket_size:
+                raise BucketFullError("Bucket is full. Cannot add more tasks.")
+            # Schedule the function execution with necessary_delay
+            if delay > 0:
+                timer = threading.Timer(
+                    delay, self.delayed_execution, (func, args, kwargs)
+                )
+                self.waiting_tasks.append(timer)
+                timer.start()
+            else:
+                self.delayed_execution(func, args, kwargs)
+
+    def leak(self, func, args, kwargs):
+        # Calculate the necessary delay to maintain the leaky rate
+        delay = self.calculate_delay()
+        # Schedule the task for execution
+        self.schedule_task(func, delay, args, kwargs)
 
 
 class TokenBucket(Algorithm):
-    def __init__(self, counter: QuotaCounter[str, tuple[float, int]]):
+    def __init__(self, counter: QuotaCounter[ty.Hashable, tuple[float, int]]):
         self._counter = counter
 
-    def get_token(self, key, quota: int, duration_s: int) -> ty.Literal[-1] | float:
+    # TODO: make this async, to support AsyncCounter, such as AsyncRedisCounter
+    def get_token(
+        self, key: ty.Hashable, quota: int, duration_s: int
+    ) -> ty.Literal[-1] | float:
         now = clock()
         last_token_time, tokens = self._counter.get(key, (now, quota))
 
@@ -146,7 +217,7 @@ algo_registry.update(
     {
         ThrottleAlgo.FIXED_WINDOW: FixedWindow,
         ThrottleAlgo.SLIDING_WINDOW: SlidingWindow,
-        ThrottleAlgo.LEAKY_BUCEKT: LeakyBucket,
+        ThrottleAlgo.LEAKY_BUCKET: LeakyBucket,
         ThrottleAlgo.TOKEN_BUCKET: TokenBucket,
     }
 )

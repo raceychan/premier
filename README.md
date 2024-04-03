@@ -27,7 +27,7 @@ premier is an intuitive throttler that supports various backends and throttling 
 ```python
 from premier import limits, throttler, ThrottleAlgo
 
-@limits(quota=quota, duration_s=5, algo=ThrottleAlgo.FIX_WINDOW)
+@limits(quota=quota, duration_s=5, algo=ThrottleAlgo.FIXED_WINDOW)
 def add(a: int, b: int) -> int:
     res = a + b
     return res

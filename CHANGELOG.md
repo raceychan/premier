@@ -2,6 +2,15 @@
 
 
 
+## v0.2.0 (2024-04-03)
+
+### Feature
+
+* feat: leakybucket ([`b0dde75`](https://github.com/raceychan/pythrottler/commit/b0dde755497574e729e8eceee582063290c2663c))
+
+* feat: readme ([`4105d39`](https://github.com/raceychan/pythrottler/commit/4105d397ca789ce21f969c0504ed4e3a897e966a))
+
+
 ## v0.1.0 (2024-04-02)
 
 ### Feature

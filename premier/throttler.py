@@ -147,6 +147,10 @@ class _Throttler:
             )
             throttle_algo = algo or self._algo
 
+            """
+            return throttler.dispatch(func, algo, quota, duration, bucket_size)
+            """
+
             if inspect.iscoroutinefunction(func):
                 ainner = self.athrottle(
                     func, throttle_algo, keymaker, bucket_size, quota, duration

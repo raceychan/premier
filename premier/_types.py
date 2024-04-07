@@ -3,6 +3,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
 
+# from concurrent.futures import Future
+
 _K = ty.TypeVar("_K", bound=ty.Hashable)
 _V = ty.TypeVar("_V")
 T = ty.TypeVar("T")
@@ -21,10 +23,74 @@ class AnyAsyncFunc(ty.Protocol[P, R]):
 @ty.runtime_checkable
 class AnyFunc(ty.Protocol[P, R]):
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
+
 class QuotaCounter(ty.Generic[_K, _V], ABC):
     """
     TODO: implemetn algorithm in counter
     """
+    @abstractmethod
+    def get(self, key: _K, default: T) -> _V | T:
+        raise NotImplementedError
+
+    @abstractmethod
+    def set(self, key: _K, value: _V) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def clear(self, keyspace: str = "") -> None:
+        raise NotImplementedError
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ThrottleData:
+    func: ... 
+    algo: "ThrottleAlgo"
+    quota: int
+    duration: int
+    bucket_size: int
+
+
+
+class ThrottleHandler:
+    def __init__(self, counter):
+        self._counter = counter
+
+    def throttle(self, key: str):
+        ...
+
+class LeakyBucketHandler(ThrottleHandler):
+    def __init__(self, counter):
+        super().__init__(counter)
+        self.lock = threading.Lock()
+        self.waiting_tasks = deque()
+
+    def throttle(self, key: str):
+        ...
+
+    def schedule_task(self, func, args, kwargs):
+        res = func(args, kwargs)
+        return res
+
+    def dispatch(self, throttle_data: ThrottleData):
+        match throttle_data.algo:
+            case ThrottleAlgo.LEAKY_BUCKET:
+                ...
+
+"""
+with throttler.acquire():
+    future = throttle.schedule_task(func, args, kwargs)
+
+@retry(max=3, on_exception=(QuotaExceeds, TimeOutError), retry_after=retry_after_waittime)
+@throttler.leaky_bucket
+@timeout(max=60s, raise=TimeoutError)
+@cache
+def add(a, b):
+    return a + b
+
+"""
+
 
 
 class AsyncQuotaCounter(ty.Generic[_K, _V], QuotaCounter[_K, _V]):

@@ -95,5 +95,28 @@ You might provide your own keymaker to the 'limits' function like this
 
 ## requirements
 
-python >= 3.10
-redis >= 5.0.3
+- python >= 3.10
+- redis >= 5.0.3
+
+
+## DevPlan
+TODO: 
+
+- [ ] support lowering version python by using type-extensions
+
+- [ ] implement timeout feature
+- [ ] implement retry feature
+- [ ] implement cache feature
+
+API Design:
+
+```python
+type Strategy = ty.Callable[[int], float]
+
+@cache
+@retry(strategy="expo", max=3, on_exception=(TimeOut, QuotaExceeds))
+@timeout(60)
+@throttler.leaky_bucket
+def add(a:int, b:int):
+    return a + b
+```

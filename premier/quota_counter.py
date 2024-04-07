@@ -83,7 +83,7 @@ class AsyncRedisCounter(Generic[_K, _V], AsyncQuotaCounter[_K, _V]):
         script = """
         return redis.call('del', unpack(redis.call('keys', ARGV[1])))
         """
-        self._redis.eval(
+        await self._redis.eval(
             script,
             0,
             f"{keyspace}:*",

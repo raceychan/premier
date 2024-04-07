@@ -1,7 +1,6 @@
 import threading
 import typing as ty
 from collections import deque
-from time import perf_counter
 from time import perf_counter as clock
 from types import FunctionType, MethodType
 
@@ -140,53 +139,64 @@ class LeakyBucket(Algorithm):
 
 
 class Bucket:
-    def __init__(self, bucket_size: int, quota: int, duration_s: int):
+    def __init__(self, counter: QuotaCounter):
+        self._counter = counter
         self.lock = threading.Lock()
-        self.last_execution_time = perf_counter()
-        self.bucket_size = bucket_size
-        self.leaky_rate = quota / duration_s
-        self.waiting_tasks = deque(maxlen=bucket_size)
+        self.waiting_tasks = deque()
 
-    def __call__(self, func):
+    def get_last_execution_time(self, key: str):
+        last_execution_time = self._counter.get(key, clock())
+        return last_execution_time
+
+    def set_last_execution_time(self, key: str, last_execution_time: float):
+        self._counter.set(key, last_execution_time)
+
+    def __call__(self, key, func, bucket_size: int, quota: int, duration: int):
         def inner(*args, **kwargs):
-            return self.leak(func, args, kwargs)
+            return self.leak(key, func, bucket_size, quota, duration, args, kwargs)
 
         return inner
 
-    def calculate_delay(self):
+    def calculate_delay(self, key: str, leaky_rate: float):
         with self.lock:
-            now = perf_counter()
-            return max(0, 1 / self.leaky_rate - (now - self.last_execution_time))
+            now = clock()
+            last_execution_time = self.get_last_execution_time(key)
+            return max(0, 1 / leaky_rate - (now - last_execution_time))
 
-    def delayed_execution(self, func, args, kwargs):
+    def delayed_execution(self, key, func, args, kwargs):
+        """
+        with self.acquire_token():
+            result = func(*args, **kwargs)
+        """
         try:
             result = func(*args, **kwargs)
         finally:
             with self.lock:
-                self.last_execution_time = perf_counter()
+                self.set_last_execution_time(key, clock())
                 # Ensure the timer is removed from the queue once executed
                 if self.waiting_tasks:
                     self.waiting_tasks.popleft()
 
-    def schedule_task(self, func, delay: float, args, kwargs):
+    def schedule_task(self, key, func, bucket_size: int, delay: float, args, kwargs):
         with self.lock:
-            if len(self.waiting_tasks) >= self.bucket_size:
+            if len(self.waiting_tasks) >= bucket_size:
                 raise BucketFullError("Bucket is full. Cannot add more tasks.")
             # Schedule the function execution with necessary_delay
             if delay > 0:
                 timer = threading.Timer(
-                    delay, self.delayed_execution, (func, args, kwargs)
+                    delay, self.delayed_execution, (key, func, args, kwargs)
                 )
                 self.waiting_tasks.append(timer)
                 timer.start()
             else:
-                self.delayed_execution(func, args, kwargs)
+                self.delayed_execution(key, func, args, kwargs)
 
-    def leak(self, func, args, kwargs):
+    def leak(
+        self, key: str, func, bucket_size: int, quota: int, duration: int, args, kwargs
+    ):
         # Calculate the necessary delay to maintain the leaky rate
-        delay = self.calculate_delay()
-        # Schedule the task for execution
-        self.schedule_task(func, delay, args, kwargs)
+        delay = self.calculate_delay(key, quota / duration)
+        self.schedule_task(key, func, bucket_size, delay, args, kwargs)
 
 
 class TokenBucket(Algorithm):

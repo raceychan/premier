@@ -1,5 +1,6 @@
 import inspect
 import typing as ty
+from functools import wraps
 from inspect import isawaitable
 
 from premier._types import (  # ThrottleInfo, Duration
@@ -74,6 +75,53 @@ class _Throttler:
             return
         self._counter.clear(self._keyspace)
 
+    def throttle(
+        self,
+        func,
+        throttle_algo: ThrottleAlgo,
+        keymaker: KeyMaker | None,
+        bucket_size: int | None,
+        quota: int,
+        duration: int,
+    ):
+        funckey = func_keymaker(func, throttle_algo, self._keyspace)
+
+        if throttle_algo is ThrottleAlgo.LEAKY_BUCKET:
+            if not bucket_size:
+                raise ValueError("leaky bucket without bucket size")
+            bucket = Bucket(self._counter)
+            return bucket(funckey, func, bucket_size, quota, duration)
+
+        @wraps(func)
+        def inner(*args: P.args, **kwargs: P.kwargs):
+            key = f"{funckey}:{keymaker(*args, **kwargs)}" if keymaker else funckey
+            self.get_token(key, throttle_algo, quota, duration)
+            res = func(*args, **kwargs)
+            return res
+
+        return inner
+
+    def athrottle(
+        self,
+        func,
+        throttle_algo: ThrottleAlgo,
+        keymaker: KeyMaker | None,
+        bucket_size: int | None,
+        quota: int,
+        duration: int,
+    ) -> AnyAsyncFunc:
+        @wraps(func)
+        async def async_inner(*args, **kwargs):
+            raise NotImplementedError
+            inner = self.throttle(
+                func, throttle_algo, keymaker, bucket_size, quota, duration
+            )
+            res = await func(*args, **kwargs)
+
+            return res
+
+        return async_inner
+
     def limits(
         self,
         quota: int,
@@ -98,33 +146,15 @@ class _Throttler:
                 else duration_s.as_seconds()
             )
             throttle_algo = algo or self._algo
-            funckey = func_keymaker(func, throttle_algo, self._keyspace)
 
-            if not inspect.iscoroutinefunction(func):
-
-                def inner(*args: P.args, **kwargs: P.kwargs):
-                    key = (
-                        f"{funckey}:{keymaker(*args, **kwargs)}"
-                        if keymaker
-                        else funckey
-                    )
-                    self.get_token(key, throttle_algo, quota, duration)
-                    return func(*args, **kwargs)
-
-                if throttle_algo is ThrottleAlgo.LEAKY_BUCKET:
-                    if not bucket_size:
-                        raise ValueError("leaky bucket without bucket size")
-                    bucket = Bucket(bucket_size, quota, duration)
-                    return bucket(func)
-
-                return inner
-            else:
-
-                async def async_inner(*args: P.args, **kwargs: P.kwargs):
-                    inner(*args, **kwargs)
-                    return await func(*args, **kwargs)
-
-            return async_inner
+            if inspect.iscoroutinefunction(func):
+                ainner = self.athrottle(
+                    func, throttle_algo, keymaker, bucket_size, quota, duration
+                )
+                return ainner
+            return self.throttle(
+                func, throttle_algo, keymaker, bucket_size, quota, duration
+            )
 
         return wrapper
 

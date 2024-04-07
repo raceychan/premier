@@ -22,17 +22,9 @@ class AnyAsyncFunc(ty.Protocol[P, R]):
 class AnyFunc(ty.Protocol[P, R]):
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
 class QuotaCounter(ty.Generic[_K, _V], ABC):
-    @abstractmethod
-    def get(self, key: _K, default: T) -> _V | T:
-        raise NotImplementedError
-
-    @abstractmethod
-    def set(self, key: _K, value: _V) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
-    def clear(self, keyspace: str = "") -> None:
-        raise NotImplementedError
+    """
+    TODO: implemetn algorithm in counter
+    """
 
 
 class AsyncQuotaCounter(ty.Generic[_K, _V], QuotaCounter[_K, _V]):

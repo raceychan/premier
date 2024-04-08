@@ -69,10 +69,12 @@ by default, premier creates keyspace of this format for throttled functions
 
 ### Customized throttle key
 
-You might provide your own keymaker to the 'limits' function like this
+You might provide your own keymaker to the 'throttler' function like this
 
 ```python
-  @limits(quota=3, duration_s=5, keymaker=lambda a, b: f"{a}")
+from premier import throttler
+
+  @throttler.fixed_window(quota=3, duration_s=5, keymaker=lambda a, b: f"{a}")
   def add(a: int, b: int) -> int:
       res = a + b
       return res
@@ -99,9 +101,9 @@ You might provide your own keymaker to the 'limits' function like this
 - python >= 3.10
 - redis >= 5.0.3
 
-
 ## DevPlan
-TODO: 
+
+TODO:
 
 - [ ] support lowering version python by using type-extensions
 

@@ -2,6 +2,7 @@
 from .api import fixed_window as fixed_window
 from .api import leaky_bucket as leaky_bucket
 from .api import sliding_window as sliding_window
+from .api import throttled as throttled
 from .api import token_bucket as token_bucket
 from .quota_counter import MemoryCounter as MemoryCounter
 from .quota_counter import RedisCounter as RedisCounter

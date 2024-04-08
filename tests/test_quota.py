@@ -8,7 +8,7 @@ from premier import BucketFullError
 from premier import MemoryCounter as MemoryCounter
 from premier import QuotaExceedsError
 from premier import RedisCounter as RedisCounter
-from premier import fixed_window, throttler, token_bucket
+from premier import fixed_window, throttled, throttler, token_bucket
 
 # from redis.asyncio.client import Redis as AIORedis
 
@@ -23,7 +23,7 @@ throttler.config(counter=RedisCounter(redis=redis))
 def test_throttle_raise_error():
     quota = 3
 
-    @fixed_window(quota=quota, duration_s=5)
+    @throttled(quota=quota, duration_s=5)
     def add(a: int, b: int) -> int:
         res = a + b
         return res

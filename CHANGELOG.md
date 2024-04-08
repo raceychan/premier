@@ -2,6 +2,27 @@
 
 
 
+## v0.3.0 (2024-04-08)
+
+### Chore
+
+* chore: readme ([`2429f50`](https://github.com/raceychan/pythrottler/commit/2429f5038b7bf241212821d1c9e7b9922b62b62a))
+
+### Feature
+
+* feat: refactor ([`e9f0c4d`](https://github.com/raceychan/pythrottler/commit/e9f0c4d45e9ff939e7c2942e03e50757f94e8333))
+
+### Fix
+
+* fix: minor errors ([`b8a630b`](https://github.com/raceychan/pythrottler/commit/b8a630bf59547bb76718dc378f0cdedecc507bc7))
+
+### Unknown
+
+* Merge pull request #1 from raceychan/dev
+
+merge latest dev branch ([`8523182`](https://github.com/raceychan/pythrottler/commit/852318253642684714edf7bd447316b4b0453ff4))
+
+
 ## v0.2.0 (2024-04-03)
 
 ### Feature

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "premier"
-version = "0.1.0"
+version = "0.3.0"
 description = "an intuitive throttler supports distributed usage and various throttling algorithms"
 authors = ["raceychan <raceychan@gmail.com>"]
 license = "MIT"
@@ -18,7 +18,6 @@ pytest = "^8.1.1"
 include = ["src/*.py"]
 typeCheckingMode = "strict"
 exclude = ["tests"]
-
 
 
 [tool.poetry.group.dev.dependencies]

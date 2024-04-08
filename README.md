@@ -12,6 +12,7 @@ premier is an intuitive throttler that supports various backends and throttling 
   - [Supported Backend](#supported-backend)
   - [Supported Algorithms](#supported-algorithms)
   - [requirements](#requirements)
+  - [DevPlan](#devplan)
 
 ## Feature
 
@@ -61,7 +62,7 @@ by default, premier creates keyspace of this format for throttled functions
 
 | name | explain | default |
 | -  | -  | -|
-| keyspace | customized string provided by user | "" |
+| keyspace | customized string provided by user | "premier" |
 | module | module name where function is defined in | func.\_\_module__ |
 | funcname | name of the function | func.\_\_name__ |
 | algorithm | throttling algorithm of the function | fixed_window |

@@ -1,7 +1,9 @@
+import threading
 import typing as ty
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
+from types import FunctionType, MethodType
 
 # from concurrent.futures import Future
 
@@ -13,21 +15,82 @@ R = ty.TypeVar("R", covariant=True)
 
 
 KeyMaker = ty.Callable[..., str]
+CountDown = ty.Literal[-1] | float
 
 
 @ty.runtime_checkable
-class AnyAsyncFunc(ty.Protocol[P, R]):
+class AsyncFunc(ty.Protocol[P, R]):
+    __name__: str
+
     async def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
 
 
 @ty.runtime_checkable
-class AnyFunc(ty.Protocol[P, R]):
+class SyncFunc(ty.Protocol[P, R]):
+    __name__: str
+
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
+
+
+AnySyncFunc = SyncFunc[..., ty.Any]
+AnyAsyncFunc = AsyncFunc[..., ty.Any]
+
+
+def func_keymaker(
+    func: AnySyncFunc | AnyAsyncFunc, algo: "ThrottleAlgo", keyspace: str
+):
+    if isinstance(func, MethodType):
+        # It's a method, get its class name and method name
+        class_name = func.__self__.__class__.__name__
+        func_name = func.__name__
+        fid = f"{class_name}:{func_name}"
+    elif isinstance(func, FunctionType):
+        # It's a standalone function
+        fid = func.__name__
+    else:
+        try:
+            fid = func.__name__
+        except AttributeError:
+            fid = ""
+
+    return f"{keyspace}:{algo.value}:{func.__module__}:{fid}"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ThrottleInfo:
+    func: AnySyncFunc | AnyAsyncFunc
+    keyspace: str
+    algo: "ThrottleAlgo"
+    quota: int
+    duration: int
+
+    @property
+    def funckey(self):
+        return func_keymaker(self.func, self.algo, self.keyspace)
+
+    def make_key(
+        self,
+        keymaker: KeyMaker | None,
+        args: tuple[object, ...],
+        kwargs: dict[ty.Any, ty.Any],
+    ) -> str:
+        key = self.funckey
+        if not keymaker:
+            return key
+
+        return f"{key}:{keymaker(*args, **kwargs)}"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LBThrottleInfo(ThrottleInfo):
+    bucket_size: int
+
 
 class QuotaCounter(ty.Generic[_K, _V], ABC):
     """
-    TODO: implemetn algorithm in counter
+    TODO: implement algorithm in counter
     """
+
     @abstractmethod
     def get(self, key: _K, default: T) -> _V | T:
         raise NotImplementedError
@@ -40,60 +103,8 @@ class QuotaCounter(ty.Generic[_K, _V], ABC):
     def clear(self, keyspace: str = "") -> None:
         raise NotImplementedError
 
-from dataclasses import dataclass
 
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ThrottleData:
-    func: ... 
-    algo: "ThrottleAlgo"
-    quota: int
-    duration: int
-    bucket_size: int
-
-
-
-class ThrottleHandler:
-    def __init__(self, counter):
-        self._counter = counter
-
-    def throttle(self, key: str):
-        ...
-
-class LeakyBucketHandler(ThrottleHandler):
-    def __init__(self, counter):
-        super().__init__(counter)
-        self.lock = threading.Lock()
-        self.waiting_tasks = deque()
-
-    def throttle(self, key: str):
-        ...
-
-    def schedule_task(self, func, args, kwargs):
-        res = func(args, kwargs)
-        return res
-
-    def dispatch(self, throttle_data: ThrottleData):
-        match throttle_data.algo:
-            case ThrottleAlgo.LEAKY_BUCKET:
-                ...
-
-"""
-with throttler.acquire():
-    future = throttle.schedule_task(func, args, kwargs)
-
-@retry(max=3, on_exception=(QuotaExceeds, TimeOutError), retry_after=retry_after_waittime)
-@throttler.leaky_bucket
-@timeout(max=60s, raise=TimeoutError)
-@cache
-def add(a, b):
-    return a + b
-
-"""
-
-
-
-class AsyncQuotaCounter(ty.Generic[_K, _V], QuotaCounter[_K, _V]):
+class AsyncQuotaCounter(ty.Generic[_K, _V]):
     @abstractmethod
     async def get(self, key: _K, default: T) -> _V | T:
         raise NotImplementedError
@@ -107,12 +118,20 @@ class AsyncQuotaCounter(ty.Generic[_K, _V], QuotaCounter[_K, _V]):
         raise NotImplementedError
 
 
-class Algorithm(ABC):
+class ThrottleHandler(ABC):
+    def __init__(
+        self,
+        counter: QuotaCounter[ty.Any, ty.Any],
+        lock: threading.Lock,
+        throttle_info: ThrottleInfo,
+    ):
+        self._counter = counter
+        self._lock = lock
+        self._info = throttle_info
+
     @abstractmethod
-    def get_token(
-        self, key: ty.Hashable, quota: int, duration: int
-    ) -> ty.Literal[-1] | float:
-        raise NotImplementedError
+    def acquire(self, key: ty.Hashable) -> CountDown:
+        pass
 
 
 @dataclass(kw_only=True)
@@ -151,7 +170,10 @@ class Duration:
 
 
 class AlgoTypeEnum(Enum):
-    def _generate_next_value_(name: str, _, __, ___):
+    @staticmethod
+    def _generate_next_value_(
+        name: str, start: int, count: int, last_values: list[ty.Any]
+    ):
         return name.lower()  # type: ignore
 
 
@@ -160,10 +182,3 @@ class ThrottleAlgo(str, AlgoTypeEnum):
     LEAKY_BUCKET = auto()
     FIXED_WINDOW = auto()
     SLIDING_WINDOW = auto()
-
-
-class ThrottleInfo(ty.NamedTuple):
-    funckey: str
-    quota: int
-    duration: Duration
-    algorithm: ThrottleAlgo

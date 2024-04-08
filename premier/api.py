@@ -1,13 +1,12 @@
-import inspect
 import typing as ty
 
-from premier._types import AnyAsyncFunc, AnyFunc, Duration, KeyMaker, P
-from premier.throttle_algo import Bucket, ThrottleAlgo, func_keymaker
+from premier._types import Duration, KeyMaker
+from premier.throttle_algo import ThrottleAlgo
 from premier.throttler import throttler
 
 
 @ty.overload
-def limits(
+def throttled(
     quota: int,
     duration_s: int | Duration,
     *,
@@ -24,7 +23,7 @@ def limits(
 
 # Overload specifically for the LEAKY_BUCKET algorithm, requiring bucket_size
 @ty.overload
-def limits(
+def throttled(
     quota: int,
     duration_s: int | Duration,
     *,
@@ -34,7 +33,7 @@ def limits(
 ): ...
 
 
-def limits(
+def throttled(
     quota: int,
     duration_s: int | Duration,
     *,
@@ -43,50 +42,60 @@ def limits(
     bucket_size: int | None = None,
 ):
     "Register the function to be throttled"
+    duration = (
+        duration_s.as_seconds() if isinstance(duration_s, Duration) else duration_s
+    )
+    algo = algo or throttler.default_algo
+    if algo is ThrottleAlgo.LEAKY_BUCKET:
+        assert bucket_size
+        return throttler.leaky_bucket(
+            quota=quota,
+            duration_s=duration,
+            keymaker=keymaker,
+            bucket_size=bucket_size,
+        )
 
-    return throttler.limits(
+    return throttler.throttle(
         quota=quota,
-        duration_s=duration_s,
-        algo=algo,
+        duration=duration,
+        throttle_algo=algo,
         keymaker=keymaker,
-        bucket_size=bucket_size,
+    )
+
+
+def fixed_window(quota: int, duration_s: int, keymaker: KeyMaker | None = None):
+    return throttler.throttle(
+        quota=quota,
+        duration=duration_s,
+        throttle_algo=ThrottleAlgo.FIXED_WINDOW,
+        keymaker=keymaker,
+    )
+
+
+def sliding_window(quota: int, duration_s: int, keymaker: KeyMaker | None = None):
+    return throttler.throttle(
+        quota=quota,
+        duration=duration_s,
+        throttle_algo=ThrottleAlgo.SLIDING_WINDOW,
+        keymaker=keymaker,
+    )
+
+
+def token_bucket(quota: int, duration_s: int, keymaker: KeyMaker | None = None):
+    return throttler.throttle(
+        quota=quota,
+        duration=duration_s,
+        throttle_algo=ThrottleAlgo.TOKEN_BUCKET,
+        keymaker=keymaker,
     )
 
 
 def leaky_bucket(
     bucket_size: int, quota: int, duration_s: int, keymaker: KeyMaker | None = None
 ):
-    return limits(
+    return throttler.leaky_bucket(
         bucket_size=bucket_size,
         quota=quota,
         duration_s=duration_s,
-        algo=ThrottleAlgo.LEAKY_BUCKET,
-        keymaker=keymaker,
-    )
-
-
-def fixed_window(quota: int, duration_s: int, keymaker: KeyMaker | None = None):
-    return limits(
-        quota=quota,
-        duration_s=duration_s,
-        algo=ThrottleAlgo.FIXED_WINDOW,
-        keymaker=keymaker,
-    )
-
-
-def sliding_window(quota: int, duration_s: int, keymaker: KeyMaker | None = None):
-    return limits(
-        quota=quota,
-        duration_s=duration_s,
-        algo=ThrottleAlgo.SLIDING_WINDOW,
-        keymaker=keymaker,
-    )
-
-
-def token_bucket(quota: int, duration_s: int, keymaker: KeyMaker | None = None):
-    return limits(
-        quota=quota,
-        duration_s=duration_s,
-        algo=ThrottleAlgo.TOKEN_BUCKET,
         keymaker=keymaker,
     )

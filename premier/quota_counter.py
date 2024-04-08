@@ -1,10 +1,14 @@
 import json
+import typing as ty
 from typing import Generic
 
 from redis import Redis
 from redis.asyncio.client import Redis as AioRedis
 
-from premier._types import _K, _V, AsyncQuotaCounter, QuotaCounter, T
+from premier._types import AsyncQuotaCounter, QuotaCounter, T
+
+_K = ty.TypeVar("_K", bound=ty.Hashable)
+_V = ty.TypeVar("_V")
 
 
 class MemoryCounter(Generic[_K, _V], QuotaCounter[_K, _V]):
@@ -14,8 +18,8 @@ class MemoryCounter(Generic[_K, _V], QuotaCounter[_K, _V]):
     def get(self, key: _K, default: T = None) -> _V | T:
         return self._map.get(key, default)
 
-    def set(self, key: _K, val: _V):
-        self._map[key] = val
+    def set(self, key: _K, value: _V):
+        self._map[key] = value
 
     def clear(self, keyspace: str = ""):
         if not keyspace:
@@ -26,18 +30,23 @@ class MemoryCounter(Generic[_K, _V], QuotaCounter[_K, _V]):
             self._map.pop(k, None)
 
 
-class AsyncMemoryCounter(MemoryCounter, Generic[_K, _V], AsyncQuotaCounter[_K, _V]):
+class AsyncMemoryCounter(Generic[_K, _V], AsyncQuotaCounter[_K, _V]):
     def __init__(self):
-        super().__init__()
+        self._map = dict[_K, _V]()
 
     async def get(self, key: _K, default: T = None) -> _V | T:
-        return super().get(key, default)
+        return self._map.get(key, default)
 
-    async def set(self, key: _K, val: _V):
-        super().set(key, val)
+    async def set(self, key: _K, value: _V):
+        self._map[key, value]
 
     async def clear(self, keyspace: str = ""):
-        super().clear(keyspace)
+        if not keyspace:
+            self._map.clear()
+
+        keys = [key for key in self._map if key.startswith(keyspace)]  # type: ignore
+        for k in keys:
+            self._map.pop(k, None)
 
 
 class RedisCounter(Generic[_K, _V], QuotaCounter[_K, _V]):
@@ -83,8 +92,13 @@ class AsyncRedisCounter(Generic[_K, _V], AsyncQuotaCounter[_K, _V]):
         script = """
         return redis.call('del', unpack(redis.call('keys', ARGV[1])))
         """
-        await self._redis.eval(
+
+        res = self._redis.eval(
             script,
             0,
             f"{keyspace}:*",
         )
+
+        if isinstance(res, str):
+            return
+        await res

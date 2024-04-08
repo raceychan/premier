@@ -1,23 +1,22 @@
-import inspect
+import threading
 import typing as ty
-from inspect import isawaitable
+from functools import wraps
 
-from premier._types import (  # ThrottleInfo, Duration
-    Algorithm,
-    AnyAsyncFunc,
-    AnyFunc,
-    Duration,
+from premier._types import (
     KeyMaker,
+    LBThrottleInfo,
     P,
     QuotaCounter,
+    R,
+    SyncFunc,
+    ThrottleInfo,
 )
 from premier.quota_counter import MemoryCounter
 from premier.throttle_algo import (
-    Bucket,
+    LeakyBucketHandler,
     QuotaExceedsError,
     ThrottleAlgo,
     algo_registry,
-    func_keymaker,
 )
 
 
@@ -27,11 +26,10 @@ class _Throttler:
     with different configs
     """
 
-    _algo_cache: ty.ClassVar[dict[str, Algorithm]] = dict()
-
-    _counter: QuotaCounter
+    _counter: QuotaCounter[ty.Hashable, ty.Any]
     _keyspace: str
     _algo: ThrottleAlgo
+    _lock: threading.Lock
 
     def __init__(self):
         self.__ready = False
@@ -40,91 +38,85 @@ class _Throttler:
     def ready(self):
         return self.__ready
 
+    @property
+    def default_algo(self):
+        return self._algo
+
     def config(
         self,
-        counter: QuotaCounter = MemoryCounter(),
+        counter: QuotaCounter[ty.Hashable, ty.Any] = MemoryCounter(),
         *,
+        lock: threading.Lock = threading.Lock(),
         algo: ThrottleAlgo = ThrottleAlgo.FIXED_WINDOW,
         keyspace: str = "premier",
     ):
         self._counter = counter
+        self._lock = lock
         self._algo = algo
         self._keyspace = keyspace
         self.__ready = True
         return self
-
-    def get_algorithm(self, key: str, algo_type: str):
-        if not (algo := self._algo_cache.get(key, None)):
-            algo = algo_registry[algo_type](self._counter)
-            self._algo_cache[key] = algo
-        return algo
-
-    def get_token(
-        self, key: str, algo_type: ThrottleAlgo, quota: int, duration_s: int
-    ) -> None | ty.Awaitable[None]:
-        if not self.__ready:
-            raise Exception("not instantiated")
-        algo = self.get_algorithm(key, algo_type)
-        time_remains = algo.get_token(key, quota, duration_s)
-        if time_remains != -1:
-            raise QuotaExceedsError(quota, duration_s, time_remains)
 
     def clear(self):
         if not self._counter:
             return
         self._counter.clear(self._keyspace)
 
-    def limits(
+    def leaky_bucket(
         self,
+        bucket_size: int,
         quota: int,
-        duration_s: int | Duration,
+        duration_s: int,
         *,
-        algo: ThrottleAlgo | None = None,
         keymaker: KeyMaker | None = None,
-        bucket_size: int | None = None,
     ):
-        @ty.overload
-        def wrapper(
-            func: AnyAsyncFunc,
-        ) -> AnyAsyncFunc: ...
-
-        @ty.overload
-        def wrapper(func: AnyFunc) -> AnyFunc: ...
-
-        def wrapper(func: AnyFunc | AnyAsyncFunc) -> AnyFunc | AnyAsyncFunc:
-            duration = (
-                duration_s
-                if not isinstance(duration_s, Duration)
-                else duration_s.as_seconds()
+        def wrapper(func: SyncFunc[P, R]):
+            info = LBThrottleInfo(
+                func=func,
+                algo=ThrottleAlgo.LEAKY_BUCKET,
+                keyspace=self._keyspace,
+                bucket_size=bucket_size,
+                quota=quota,
+                duration=duration_s,
             )
-            throttle_algo = algo or self._algo
-            funckey = func_keymaker(func, throttle_algo, self._keyspace)
+            handler = LeakyBucketHandler(self._counter, self._lock, info)
 
-            if not inspect.iscoroutinefunction(func):
+            @wraps(func)
+            def inner(*args: P.args, **kwargs: P.kwargs):
+                key = info.make_key(keymaker, args, kwargs)
+                return handler.schedule_task(key, func, args, kwargs)
 
-                def inner(*args: P.args, **kwargs: P.kwargs):
-                    key = (
-                        f"{funckey}:{keymaker(*args, **kwargs)}"
-                        if keymaker
-                        else funckey
-                    )
-                    self.get_token(key, throttle_algo, quota, duration)
-                    return func(*args, **kwargs)
+            return inner
 
-                if throttle_algo is ThrottleAlgo.LEAKY_BUCKET:
-                    if not bucket_size:
-                        raise ValueError("leaky bucket without bucket size")
-                    bucket = Bucket(bucket_size, quota, duration)
-                    return bucket(func)
+        return wrapper
 
-                return inner
-            else:
+    def throttle(
+        self,
+        throttle_algo: ThrottleAlgo,
+        quota: int,
+        duration: int,
+        keymaker: KeyMaker | None = None,
+    ):
+        def wrapper(func: SyncFunc[P, R]) -> SyncFunc[P, R]:
+            info = ThrottleInfo(
+                func=func,
+                keyspace=self._keyspace,
+                algo=throttle_algo,
+                quota=quota,
+                duration=duration,
+            )
+            handler = algo_registry[info.algo](self._counter, self._lock, info)
 
-                async def async_inner(*args: P.args, **kwargs: P.kwargs):
-                    inner(*args, **kwargs)
-                    return await func(*args, **kwargs)
+            @wraps(func)
+            def inner(*args: P.args, **kwargs: P.kwargs) -> R:
+                key = info.make_key(keymaker, args, kwargs)
+                cnt_down = handler.acquire(key)
+                if cnt_down != -1:
+                    raise QuotaExceedsError(quota, duration, cnt_down)
+                res = func(*args, **kwargs)
+                return res
 
-            return async_inner
+            return inner
 
         return wrapper
 

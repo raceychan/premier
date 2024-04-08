@@ -14,6 +14,12 @@ redis = "^5.0.3"
 [tool.poetry.group.test.dependencies]
 pytest = "^8.1.1"
 
+[tool.pyright]
+include = ["src/*.py"]
+typeCheckingMode = "strict"
+exclude = ["tests"]
+
+
 
 [tool.poetry.group.dev.dependencies]
 python-semantic-release = "^9.4.0"

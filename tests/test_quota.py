@@ -1,4 +1,4 @@
-# import asyncio
+import asyncio
 import time
 
 import pytest
@@ -17,7 +17,7 @@ url = "redis://@192.168.50.22:7379/0"
 redis = Redis.from_url(url)  # type: ignore
 
 
-throttler.config(counter=RedisCounter(redis=redis))
+# throttler.config(counter=RedisCounter(redis=redis))
 
 
 def test_throttle_raise_error():

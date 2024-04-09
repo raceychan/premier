@@ -1,8 +1,11 @@
+import asyncio
 import typing as ty
 
 from premier._types import Duration, KeyMaker
-from premier.throttle_algo import ThrottleAlgo
+from premier.handlers import ThrottleAlgo
 from premier.throttler import throttler
+
+asyncio.run
 
 
 @ty.overload

@@ -3,7 +3,7 @@ import typing as ty
 from typing import Generic
 
 from redis import Redis
-from redis.asyncio.client import Redis as AioRedis
+from redis.asyncio.client import Redis as AIORedis
 
 from premier._types import AsyncQuotaCounter, QuotaCounter, T
 
@@ -75,7 +75,7 @@ class RedisCounter(Generic[_K, _V], QuotaCounter[_K, _V]):
 
 
 class AsyncRedisCounter(Generic[_K, _V], AsyncQuotaCounter[_K, _V]):
-    def __init__(self, redis: AioRedis, *, ex_s: int = 30) -> None:
+    def __init__(self, redis: AIORedis, *, ex_s: int = 30) -> None:
         self._redis = redis
         self._ex_s = ex_s
 

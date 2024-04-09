@@ -9,15 +9,11 @@ from premier._types import (
     QuotaCounter,
     R,
     SyncFunc,
+    ThrottleAlgo,
     ThrottleInfo,
 )
+from premier.handlers import QuotaExceedsError
 from premier.quota_counter import MemoryCounter
-from premier.throttle_algo import (
-    LeakyBucketHandler,
-    QuotaExceedsError,
-    ThrottleAlgo,
-    algo_registry,
-)
 
 
 class _Throttler:
@@ -76,15 +72,20 @@ class _Throttler:
                 algo=ThrottleAlgo.LEAKY_BUCKET,
                 keyspace=self._keyspace,
                 bucket_size=bucket_size,
-                quota=quota,
-                duration=duration_s,
             )
             handler = LeakyBucketHandler(self._counter, self._lock, info)
 
             @wraps(func)
             def inner(*args: P.args, **kwargs: P.kwargs):
                 key = info.make_key(keymaker, args, kwargs)
-                return handler.schedule_task(key, func, args, kwargs)
+                return handler.schedule_task(
+                    key,
+                    quota=quota,
+                    duration=duration_s,
+                    func=func,
+                    args=args,
+                    kwargs=kwargs,
+                )
 
             return inner
 
@@ -102,15 +103,13 @@ class _Throttler:
                 func=func,
                 keyspace=self._keyspace,
                 algo=throttle_algo,
-                quota=quota,
-                duration=duration,
             )
             handler = algo_registry[info.algo](self._counter, self._lock, info)
 
             @wraps(func)
             def inner(*args: P.args, **kwargs: P.kwargs) -> R:
                 key = info.make_key(keymaker, args, kwargs)
-                cnt_down = handler.acquire(key)
+                cnt_down = handler.acquire(key, quota=quota, duration=duration)
                 if cnt_down != -1:
                     raise QuotaExceedsError(quota, duration, cnt_down)
                 res = func(*args, **kwargs)

@@ -61,8 +61,6 @@ class ThrottleInfo:
     func: AnySyncFunc | AnyAsyncFunc
     keyspace: str
     algo: "ThrottleAlgo"
-    quota: int
-    duration: int
 
     @property
     def funckey(self):
@@ -130,7 +128,7 @@ class ThrottleHandler(ABC):
         self._info = throttle_info
 
     @abstractmethod
-    def acquire(self, key: ty.Hashable) -> CountDown:
+    def acquire(self, key: ty.Hashable, quota: int, duration: int) -> CountDown:
         pass
 
 

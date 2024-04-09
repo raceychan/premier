@@ -17,7 +17,8 @@ url = "redis://@192.168.50.22:7379/0"
 redis = Redis.from_url(url)  # type: ignore
 
 
-throttler.config(counter=RedisCounter(redis=redis))
+# throttler.config(counter=RedisCounter(redis=redis))
+throttler.config(counter=MemoryCounter())
 
 
 def test_throttle_raise_error():

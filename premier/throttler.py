@@ -6,14 +6,12 @@ from premier._types import (
     KeyMaker,
     LBThrottleInfo,
     P,
-    QuotaCounter,
     R,
     SyncFunc,
     ThrottleAlgo,
     ThrottleInfo,
 )
-from premier.handlers import QuotaExceedsError
-from premier.quota_counter import MemoryCounter
+from premier.handlers import DefaultHandler, QuotaExceedsError, ThrottleHandler
 
 
 class _Throttler:
@@ -22,7 +20,8 @@ class _Throttler:
     with different configs
     """
 
-    _counter: QuotaCounter[ty.Hashable, ty.Any]
+    # _counter: QuotaCounter[ty.Hashable, ty.Any]
+    _handler: ThrottleHandler
     _keyspace: str
     _algo: ThrottleAlgo
     _lock: threading.Lock
@@ -40,13 +39,13 @@ class _Throttler:
 
     def config(
         self,
-        counter: QuotaCounter[ty.Hashable, ty.Any] = MemoryCounter(),
+        handler: ThrottleHandler,
         *,
         lock: threading.Lock = threading.Lock(),
         algo: ThrottleAlgo = ThrottleAlgo.FIXED_WINDOW,
         keyspace: str = "premier",
     ):
-        self._counter = counter
+        self._handler = handler
         self._lock = lock
         self._algo = algo
         self._keyspace = keyspace
@@ -54,9 +53,9 @@ class _Throttler:
         return self
 
     def clear(self):
-        if not self._counter:
+        if not self._handler:
             return
-        self._counter.clear(self._keyspace)
+        self._handler.clear(self._keyspace)
 
     def leaky_bucket(
         self,
@@ -65,27 +64,22 @@ class _Throttler:
         duration_s: int,
         *,
         keymaker: KeyMaker | None = None,
-    ):
-        def wrapper(func: SyncFunc[P, R]):
+    ) -> ty.Callable[[ty.Callable[..., None]], ty.Callable[..., None]]:
+        def wrapper(func: SyncFunc[P, None]):
             info = LBThrottleInfo(
                 func=func,
                 algo=ThrottleAlgo.LEAKY_BUCKET,
                 keyspace=self._keyspace,
                 bucket_size=bucket_size,
             )
-            handler = LeakyBucketHandler(self._counter, self._lock, info)
 
             @wraps(func)
-            def inner(*args: P.args, **kwargs: P.kwargs):
+            def inner(*args: P.args, **kwargs: P.kwargs) -> None:
                 key = info.make_key(keymaker, args, kwargs)
-                return handler.schedule_task(
-                    key,
-                    quota=quota,
-                    duration=duration_s,
-                    func=func,
-                    args=args,
-                    kwargs=kwargs,
+                schedule_task = self._handler.leaky_bucket(
+                    key, bucket_size, quota, duration_s
                 )
+                return schedule_task(func, *args, **kwargs)  # type: ignore
 
             return inner
 
@@ -97,21 +91,22 @@ class _Throttler:
         quota: int,
         duration: int,
         keymaker: KeyMaker | None = None,
-    ):
+    ) -> ty.Callable[[ty.Callable[..., R]], ty.Callable[..., R]]:
         def wrapper(func: SyncFunc[P, R]) -> SyncFunc[P, R]:
             info = ThrottleInfo(
                 func=func,
                 keyspace=self._keyspace,
                 algo=throttle_algo,
             )
-            handler = algo_registry[info.algo](self._counter, self._lock, info)
 
             @wraps(func)
             def inner(*args: P.args, **kwargs: P.kwargs) -> R:
                 key = info.make_key(keymaker, args, kwargs)
-                cnt_down = handler.acquire(key, quota=quota, duration=duration)
-                if cnt_down != -1:
-                    raise QuotaExceedsError(quota, duration, cnt_down)
+                countdown = self._handler.dispatch(info.algo)(
+                    key, quota=quota, duration=duration
+                )
+                if countdown != -1:
+                    raise QuotaExceedsError(quota, duration, countdown)
                 res = func(*args, **kwargs)
                 return res
 
@@ -120,4 +115,4 @@ class _Throttler:
         return wrapper
 
 
-throttler = _Throttler().config()
+throttler = _Throttler().config(DefaultHandler(dict()))

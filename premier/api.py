@@ -1,11 +1,8 @@
-import asyncio
+# import asyncio
 import typing as ty
 
-from premier._types import Duration, KeyMaker
-from premier.handlers import ThrottleAlgo
+from premier._types import Duration, KeyMaker, R, ThrottleAlgo
 from premier.throttler import throttler
-
-asyncio.run
 
 
 @ty.overload
@@ -20,11 +17,10 @@ def throttled(
         | None
     ) = None,
     keymaker: KeyMaker | None = None,
-    bucket_size: None = None,
-): ...
+) -> ty.Callable[[ty.Callable[..., R]], ty.Callable[..., R]]:
+    pass
 
 
-# Overload specifically for the LEAKY_BUCKET algorithm, requiring bucket_size
 @ty.overload
 def throttled(
     quota: int,
@@ -33,7 +29,7 @@ def throttled(
     algo: ty.Literal[ThrottleAlgo.LEAKY_BUCKET],
     keymaker: KeyMaker | None = None,
     bucket_size: int,
-): ...
+) -> ty.Callable[[ty.Callable[..., None]], ty.Callable[..., None]]: ...
 
 
 def throttled(
@@ -43,6 +39,9 @@ def throttled(
     algo: ThrottleAlgo | None = None,
     keymaker: KeyMaker | None = None,
     bucket_size: int | None = None,
+) -> (
+    ty.Callable[[ty.Callable[..., None]], ty.Callable[..., None]]
+    | ty.Callable[[ty.Callable[..., R]], ty.Callable[..., R]]
 ):
     "Register the function to be throttled"
     duration = (

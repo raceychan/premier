@@ -1,9 +1,16 @@
 import threading
 import typing as ty
+from pathlib import Path
 from time import perf_counter as clock
 
-from premier._types import CountDown
-from premier.quota_counter import MemoryCounter
+from redis.client import Redis
+
+from premier._types import CountDown, P, R, ScriptFunc, TaskScheduler, ThrottleHandler
+
+FixedWindowScript = SlidingWindowScript = TokenBucketScript = ScriptFunc[
+    tuple[str], tuple[int, int], CountDown
+]
+LeakyBucketScript = ScriptFunc[tuple[str], tuple[int, int, int], CountDown]
 
 
 class QuotaExceedsError(Exception):
@@ -20,48 +27,22 @@ class BucketFullError(QuotaExceedsError):
         self.msg = msg
 
 
-from abc import ABC, abstractmethod
-
-
-class ThrottleHandler(ABC):
-
-    @abstractmethod
-    def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
-        pass
-
-    @abstractmethod
-    def sliding_window(self, key: str, quota: int, duration: int) -> CountDown:
-        pass
-
-    @abstractmethod
-    def token_bucket(self, key: str, quota: int, duration: int) -> CountDown:
-        pass
-
-    @abstractmethod
-    def leaky_bucket(self, key: str, bucket_size: int, quota: int, duration: int):
-        pass
-
-
-P = ty.ParamSpec("P")
-R = ty.TypeVar("R")
-
-
 class DefaultHandler(ThrottleHandler):
-    def __init__(self):
-        self._counter = MemoryCounter[ty.Hashable, ty.Any]()
+    def __init__(self, counter: dict[ty.Hashable, ty.Any]):
+        self._counter = dict[ty.Hashable, ty.Any]()
 
     def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
         time, cnt = self._counter.get(key, (clock() + duration, 0))
 
         if (now := clock()) > time:
-            self._counter.set(key, (now + duration, 1))
+            self._counter[key] = (now + duration, 1)
             return -1  # Available now
 
         if cnt >= quota:
             # Return time remaining until the next window starts
             return time - now
 
-        self._counter.set(key, (time, cnt + 1))
+        self._counter[key] = (time, cnt + 1)
         return -1  # Token was available, no wait needed
 
     def sliding_window(self, key: str, quota: int, duration: int) -> CountDown:
@@ -82,7 +63,7 @@ class DefaultHandler(ThrottleHandler):
             ) * duration
             return remains
 
-        self._counter.set(key, (sliding_window_start, cnt + 1))
+        self._counter[key] = (sliding_window_start, cnt + 1)
         return -1
 
     def token_bucket(self, key: str, quota: int, duration: int) -> CountDown:
@@ -99,10 +80,12 @@ class DefaultHandler(ThrottleHandler):
             # Return time remaining for the next token to refill
             return (1 - new_tokens) / refill_rate
 
-        self._counter.set(key, (now, new_tokens - 1))
+        self._counter[key] = (now, new_tokens - 1)
         return -1
 
-    def leaky_bucket(self, key: str, bucket_size: int, quota: int, duration: int):
+    def leaky_bucket(
+        self, key: str, bucket_size: int, quota: int, duration: int
+    ) -> TaskScheduler:
         def _waiting_key(key: ty.Hashable) -> str:
             return f"{key}:waiting_task"
 
@@ -113,13 +96,12 @@ class DefaultHandler(ThrottleHandler):
             **kwargs: P.kwargs,
         ):
             try:
-                result = func(*args, **kwargs)
-                return result
+                func(*args, **kwargs)
             finally:
-                self._counter.set(key, clock())
+                self._counter[key] = clock()
                 waiting_tasks = self._counter.get(_waiting_key(key), 0)
                 if waiting_tasks:
-                    self._counter.set(_waiting_key(key), waiting_tasks - 1)
+                    self._counter[_waiting_key(key)] = waiting_tasks - 1
 
         def _calculate_delay(key: ty.Hashable, quota: int, duration: int) -> CountDown:
             now = clock()
@@ -131,7 +113,9 @@ class DefaultHandler(ThrottleHandler):
             delay = (1 / leak_rate) - elapsed
             return delay
 
-        def _schedule_task(func: ty.Callable[P, R], *args: P.args, **kwargs: P.kwargs):
+        def _schedule_task(
+            func: ty.Callable[P, R], *args: P.args, **kwargs: P.kwargs
+        ) -> None:
             delay = _calculate_delay(key, quota, duration)
 
             waiting_tasks = self._counter.get(_waiting_key(key), 0)
@@ -139,11 +123,111 @@ class DefaultHandler(ThrottleHandler):
                 raise BucketFullError("Bucket is full. Cannot add more tasks.")
 
             if delay <= 0:
-                res = _execute(key, func, *args, **kwargs)
-                return res
-
-            timer = threading.Timer(delay, _execute, (key, func, args, kwargs))
-            self._counter.set(_waiting_key(key), waiting_tasks + 1)
+                _execute(key, func, *args, **kwargs)
+            # NOTE: this is wrong, _execute should check for token when executed
+            timer = threading.Timer(
+                delay, _execute, args=(key, func, *args), kwargs=kwargs
+            )
+            self._counter[_waiting_key(key)] = waiting_tasks + 1
             timer.start()
 
         return _schedule_task
+
+    def clear(self, keyspace: str = ""):
+        self._counter.clear()
+
+
+class RedisHandler(ThrottleHandler):
+    _fixed_window_script: FixedWindowScript
+    _sliding_window: SlidingWindowScript
+    _token_bucket: TokenBucketScript
+    _leaky_bucket: LeakyBucketScript
+    _leaky_bucket_decr: ScriptFunc[tuple[str], tuple[ty.Any], ty.Any]
+
+    def __init__(self, redis: Redis):
+        self._redis = redis
+        self._script_path = Path(__file__).parent / "lua"
+        self._load_script()
+
+    def _load_script(self):
+        self._fixed_window_script = self._redis.register_script(
+            (self._script_path / "fixed_window.lua").read_text()
+        )  # type: ignore
+        self._sliding_window = self._redis.register_script(
+            (self._script_path / "sliding_window.lua").read_text()
+        )  # type: ignore
+        self._token_bucket = self._redis.register_script(
+            (self._script_path / "token_bucket.lua").read_text()
+        )  # type: ignore
+        self._leaky_bucket = self._redis.register_script(
+            (self._script_path / "leaky_bucket.lua").read_text()
+        )  # type: ignore
+
+        # Decrease the number of waiting tasks after execution
+        LUA = """
+        local waiting_key = KEYS[1] -- The key for tracking waiting tasks
+
+        local waiting_tasks = tonumber(redis.call('GET', waiting_key)) or 0
+        if waiting_tasks > 0 then
+            redis.call('DECR', waiting_key)
+        end
+        """
+        self._leaky_bucket_decr = self._redis.register_script(LUA)
+
+    def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
+        res = self._fixed_window_script(keys=(key,), args=(quota, duration))
+        return res
+
+    def sliding_window(self, key: str, quota: int, duration: int) -> CountDown:
+        res = self._sliding_window(keys=(key,), args=(quota, duration))
+        return res
+
+    def token_bucket(self, key: str, quota: int, duration: int) -> CountDown:
+        res = self._token_bucket(keys=(key,), args=(quota, duration))
+        return res
+
+    def leaky_bucket(
+        self, key: str, bucket_size: int, quota: int, duration: int
+    ) -> TaskScheduler:
+
+        def _waiting_key(key: ty.Hashable) -> str:
+            return f"{key}:waiting_task"
+
+        def _decrase_level(key: ty.Hashable) -> None:
+            wkey = _waiting_key(key)
+            self._leaky_bucket_decr(keys=(wkey,), args=tuple())
+
+        def _execute(
+            key: ty.Hashable,
+            func: ty.Callable[P, R],
+            *args: P.args,
+            **kwargs: P.kwargs,
+        ):
+            try:
+                func(*args, **kwargs)
+            finally:
+                _decrase_level(key)
+
+        def _schedule_task(
+            func: ty.Callable[P, R], *args: P.args, **kwargs: P.kwargs
+        ) -> None:
+            try:
+                delay = self._leaky_bucket(
+                    keys=(key,), args=(bucket_size, quota, duration)
+                )
+            except Exception:
+                raise BucketFullError("Bucket is full. Cannot add more tasks.")
+
+            if delay <= 0:
+                _execute(key, func, *args, **kwargs)
+
+            timer = threading.Timer(
+                delay, _execute, args=(key, func, *args), kwargs=kwargs
+            )
+            timer.start()
+
+        return _schedule_task
+
+    def clear(self, keyspace: str = "") -> None:
+        pass
+        # raise NotImplementedError

@@ -4,6 +4,7 @@ from .api import sliding_window as sliding_window
 from .api import throttled as throttled
 from .api import token_bucket as token_bucket
 from .handlers import BucketFullError as BucketFullError
+from .handlers import DefaultHandler as DefaultHandler
 from .handlers import QuotaExceedsError as QuotaExceedsError
 from .handlers import RedisHandler as RedisHandler
 from .throttler import throttler as throttler

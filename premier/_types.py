@@ -91,6 +91,20 @@ class ThrottleInfo:
         return f"{key}:{keymaker(*args, **kwargs)}"
 
 
+def make_key(
+    func: AnySyncFunc | AnyAsyncFunc,
+    algo: "ThrottleAlgo",
+    keyspace: str,
+    keymaker: KeyMaker | None,
+    args: tuple[object, ...],
+    kwargs: dict[ty.Any, ty.Any],
+) -> str:
+    key = func_keymaker(func, algo, keyspace)
+    if not keymaker:
+        return key
+    return f"{key}:{keymaker(*args, **kwargs)}"
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class LBThrottleInfo(ThrottleInfo):
     bucket_size: int
@@ -172,6 +186,43 @@ class ThrottleHandler(ABC):
 
     def dispatch(self, algo: ThrottleAlgo):
         "does not handle leaky bucket case"
+        match algo:
+            case ThrottleAlgo.FIXED_WINDOW:
+                return self.fixed_window
+            case ThrottleAlgo.SLIDING_WINDOW:
+                return self.sliding_window
+            case ThrottleAlgo.TOKEN_BUCKET:
+                return self.token_bucket
+            case _:
+                raise NotImplementedError
+
+
+class AsyncThrottleHandler(ABC):
+
+    @abstractmethod
+    async def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
+        pass
+
+    @abstractmethod
+    async def sliding_window(self, key: str, quota: int, duration: int) -> CountDown:
+        pass
+
+    @abstractmethod
+    async def token_bucket(self, key: str, quota: int, duration: int) -> CountDown:
+        pass
+
+    @abstractmethod
+    async def leaky_bucket(
+        self, key: str, bucket_size: int, quota: int, duration: int
+    ) -> ty.Awaitable[TaskScheduler]:
+        pass
+
+    @abstractmethod
+    async def clear(self, keyspace: str = "") -> None:
+        pass
+
+    def dispatch(self, algo: ThrottleAlgo):
+        "does not handle the leaky bucket case"
         match algo:
             case ThrottleAlgo.FIXED_WINDOW:
                 return self.fixed_window

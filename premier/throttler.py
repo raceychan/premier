@@ -9,9 +9,14 @@ from premier._types import (
     R,
     SyncFunc,
     ThrottleAlgo,
-    ThrottleInfo,
+    make_key,
 )
-from premier.handlers import DefaultHandler, QuotaExceedsError, ThrottleHandler
+from premier.handlers import (
+    AsyncThrottleHandler,
+    DefaultHandler,
+    QuotaExceedsError,
+    ThrottleHandler,
+)
 
 
 class _Throttler:
@@ -20,7 +25,6 @@ class _Throttler:
     with different configs
     """
 
-    # _counter: QuotaCounter[ty.Hashable, ty.Any]
     _handler: ThrottleHandler
     _keyspace: str
     _algo: ThrottleAlgo
@@ -39,13 +43,14 @@ class _Throttler:
 
     def config(
         self,
-        handler: ThrottleHandler,
+        handler: ThrottleHandler | None = None,
+        aiohandler: AsyncThrottleHandler | None = None,
         *,
         lock: threading.Lock = threading.Lock(),
         algo: ThrottleAlgo = ThrottleAlgo.FIXED_WINDOW,
         keyspace: str = "premier",
     ):
-        self._handler = handler
+        self._handler = handler or DefaultHandler()
         self._lock = lock
         self._algo = algo
         self._keyspace = keyspace
@@ -91,18 +96,23 @@ class _Throttler:
         quota: int,
         duration: int,
         keymaker: KeyMaker | None = None,
-    ) -> ty.Callable[[ty.Callable[..., R]], ty.Callable[..., R]]:
-        def wrapper(func: SyncFunc[P, R]) -> SyncFunc[P, R]:
-            info = ThrottleInfo(
-                func=func,
-                keyspace=self._keyspace,
-                algo=throttle_algo,
-            )
-
+        bucket_size: int = None,  # type: ignore
+    ) -> (
+        ty.Callable[[ty.Callable[..., R]], ty.Callable[..., R]]
+        | ty.Callable[[ty.Callable[..., None]], ty.Callable[..., None]]
+    ):
+        def wrapper(func: SyncFunc[P, R]) -> SyncFunc[P, R] | SyncFunc[P, None]:
             @wraps(func)
             def inner(*args: P.args, **kwargs: P.kwargs) -> R:
-                key = info.make_key(keymaker, args, kwargs)
-                countdown = self._handler.dispatch(info.algo)(
+                key = make_key(
+                    func,
+                    algo=throttle_algo,
+                    keyspace=self._keyspace,
+                    args=args,
+                    kwargs=kwargs,
+                    keymaker=keymaker,
+                )
+                countdown = self._handler.dispatch(throttle_algo)(
                     key, quota=quota, duration=duration
                 )
                 if countdown != -1:
@@ -110,7 +120,25 @@ class _Throttler:
                 res = func(*args, **kwargs)
                 return res
 
-            return inner
+            @wraps(func)
+            def lb_inner(*args: P.args, **kwargs: P.kwargs) -> None:
+                key = make_key(
+                    func,
+                    algo=throttle_algo,
+                    keyspace=self._keyspace,
+                    args=args,
+                    kwargs=kwargs,
+                    keymaker=keymaker,
+                )
+                schedule_task = self._handler.leaky_bucket(
+                    key, bucket_size, quota, duration
+                )
+                return schedule_task(func, *args, **kwargs)  # type: ignore
+
+            if throttle_algo is ThrottleAlgo.LEAKY_BUCKET:
+                return lb_inner
+            else:
+                return inner
 
         return wrapper
 

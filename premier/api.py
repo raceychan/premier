@@ -48,20 +48,12 @@ def throttled(
         duration_s.as_seconds() if isinstance(duration_s, Duration) else duration_s
     )
     algo = algo or throttler.default_algo
-    if algo is ThrottleAlgo.LEAKY_BUCKET:
-        assert bucket_size
-        return throttler.leaky_bucket(
-            quota=quota,
-            duration_s=duration,
-            keymaker=keymaker,
-            bucket_size=bucket_size,
-        )
-
     return throttler.throttle(
         quota=quota,
         duration=duration,
         throttle_algo=algo,
         keymaker=keymaker,
+        bucket_size=bucket_size,  # type: ignore
     )
 
 

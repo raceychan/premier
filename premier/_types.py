@@ -22,7 +22,9 @@ ArgsT = ty.TypeVar(
     contravariant=True,
 )
 ResultT = ty.TypeVar("ResultT", bound=ty.Any, covariant=True)
-TaskScheduler = ty.Callable[[ty.Callable[..., None], ty.Any, ty.Any], None]
+
+TaskScheduler = ty.Callable[..., None]
+AsyncTaskScheduler = ty.Callable[..., ty.Awaitable[None]]
 
 
 @ty.runtime_checkable
@@ -212,9 +214,9 @@ class AsyncThrottleHandler(ABC):
         pass
 
     @abstractmethod
-    async def leaky_bucket(
+    def leaky_bucket(
         self, key: str, bucket_size: int, quota: int, duration: int
-    ) -> ty.Awaitable[TaskScheduler]:
+    ) -> AsyncTaskScheduler:
         pass
 
     @abstractmethod

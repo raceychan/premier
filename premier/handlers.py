@@ -1,7 +1,7 @@
 import asyncio
 import threading
 import typing as ty
-from concurrent.futures import ThreadPoolExecutor  # , as_completed
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from time import perf_counter as clock
 
@@ -10,6 +10,7 @@ from redis.client import Redis
 from redis.exceptions import ResponseError as RedisExceptionResponse
 
 from premier._types import (
+    AsyncTaskScheduler,
     AsyncThrottleHandler,
     CountDown,
     P,
@@ -18,9 +19,6 @@ from premier._types import (
     TaskScheduler,
     ThrottleHandler,
 )
-
-# from redis.exceptions import ResponseError
-
 
 FixedWindowScript = SlidingWindowScript = TokenBucketScript = ScriptFunc[
     tuple[str], tuple[int, int], CountDown
@@ -159,18 +157,44 @@ class DefaultHandler(ThrottleHandler):
             self._counter.pop(k, None)
 
 
+# class AsyncDefaultThrottler(AsyncThrottleHandler):
+#     def __init__(self, handler: DefaultHandler):
+#         self._hanlder = handler
+
+#     async def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
+#         return self._hanlder.fixed_window(key, quota, duration)
+
+#     async def token_bucket(self, key: str, quota: int, duration: int) -> CountDown:
+#         return self._hanlder.token_bucket(key, quota, duration)
+
+#     async def leaky_bucket(  # type: ignore
+#         self, key: str, bucket_size: int, quota: int, duration: int
+#     ):
+#         return self._hanlder.leaky_bucket(key, bucket_size, quota, duration)
+
+#     async def clear(self, keyspace: str = ""):
+#         self._hanlder.clear(keyspace)
+
+#     async def sliding_window(self, key: str, quota: int, duration: int) -> CountDown:
+#         return self._hanlder.sliding_window(key, quota, duration)
+
+
 executor = ThreadPoolExecutor(max_workers=5)
 
+RedisClient = ty.TypeVar("RedisClient", Redis, AIORedis)
 
-class RedisScriptLoader:
-    _fixed_window_script: FixedWindowScript
-    _sliding_window: SlidingWindowScript
-    _token_bucket: TokenBucketScript
-    _leaky_bucket: LeakyBucketScript
-    _leaky_bucket_decr: ScriptFunc[tuple[str], tuple[ty.Any], ty.Any]
-    _clear_keyspace: ScriptFunc[tuple[ty.Any], tuple[str], None]
 
-    _leaky_bucket_decr_lua = """
+class RedisScriptLoader(ty.Generic[RedisClient]):
+    # fixed_window_script: FixedWindowScript
+    # sliding_window: SlidingWindowScript
+    # token_bucket: TokenBucketScript
+    # leaky_bucket: LeakyBucketScript
+    # leaky_bucket_decr: ScriptFunc[tuple[str], tuple[ty.Any], ty.Any]
+    # clear_keyspace: ScriptFunc[tuple[ty.Any], tuple[str], None]
+
+    leaky_bucket_decr_lua: ty.ClassVar[
+        str
+    ] = """
     local waiting_key = KEYS[1] -- The key for tracking waiting tasks
 
     local waiting_tasks = tonumber(redis.call('GET', waiting_key)) or 0
@@ -179,54 +203,56 @@ class RedisScriptLoader:
     end
     """
 
-    _clear_keyspace_lua = """
+    clear_keyspace_lua: ty.ClassVar[
+        str
+    ] = """
     return redis.call('del', unpack(redis.call('keys', ARGV[1])))
     """
 
-    def __init__(self, redis: Redis):
-        self._redis = redis
-        self._script_path = Path(__file__).parent / "lua"
-        self._load_script()
+    def __init__(self, redis: RedisClient, *, script_path: Path | None = None):
+        self._script_path = script_path or Path(__file__).parent / "lua"
+        self._load_script(redis)
 
-    def _load_script(self):
-        self._fixed_window_script = self._redis.register_script(
+    def _load_script(self, redis: RedisClient):
+        self.fixed_window_script = redis.register_script(
             (self._script_path / "fixed_window.lua").read_text()
         )  # type: ignore
-        self._sliding_window = self._redis.register_script(
+        self.sliding_window = redis.register_script(
             (self._script_path / "sliding_window.lua").read_text()
         )  # type: ignore
-        self._token_bucket = self._redis.register_script(
+        self.token_bucket = redis.register_script(
             (self._script_path / "token_bucket.lua").read_text()
         )  # type: ignore
-        self._leaky_bucket = self._redis.register_script(
+        self.leaky_bucket = redis.register_script(
             (self._script_path / "leaky_bucket.lua").read_text()
         )  # type: ignore
 
-        self._leaky_bucket_decr = self._redis.register_script(
-            self._leaky_bucket_decr_lua
-        )
-        self._clear_keyspace = self._redis.register_script(self._clear_keyspace_lua)  # type: ignore
+        self.leaky_bucket_decr = redis.register_script(self.leaky_bucket_decr_lua)
+        self.clear_keyspace = redis.register_script(self.clear_keyspace_lua)  # type: ignore
 
 
-class AsyncRedisScriptLoader(RedisScriptLoader):
-    def __init__(self, redis: AIORedis):
+class RedisHandler(ThrottleHandler):
+    def __init__(
+        self, redis: "Redis", script_loader: RedisScriptLoader[Redis] | None = None
+    ):
         self._redis = redis
-
-
-class RedisHandler(ThrottleHandler, RedisScriptLoader):
-    def __init__(self, redis: "Redis"):
-        super().__init__(redis)
+        self._script_loader = script_loader or RedisScriptLoader(redis)
 
     def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
-        res = self._fixed_window_script(keys=(key,), args=(quota, duration))
+        res = self._script_loader.fixed_window_script(
+            keys=(key,), args=(quota, duration)
+        )
+        res = ty.cast(CountDown, res)
         return res
 
     def sliding_window(self, key: str, quota: int, duration: int) -> CountDown:
-        res = self._sliding_window(keys=(key,), args=(quota, duration))
+        res = self._script_loader.sliding_window(keys=(key,), args=(quota, duration))
+        res = ty.cast(CountDown, res)
         return res
 
     def token_bucket(self, key: str, quota: int, duration: int) -> CountDown:
-        res = self._token_bucket(keys=(key,), args=(quota, duration))
+        res = self._script_loader.token_bucket(keys=(key,), args=(quota, duration))
+        res = ty.cast(CountDown, res)
         return res
 
     def leaky_bucket(
@@ -238,12 +264,15 @@ class RedisHandler(ThrottleHandler, RedisScriptLoader):
 
         def _decrase_level(key: ty.Hashable) -> None:
             wkey = _waiting_key(key)
-            self._leaky_bucket_decr(keys=(wkey,), args=tuple())
+            self._script_loader.leaky_bucket_decr(keys=(wkey,), args=tuple())
 
-        def _get_delay(key: str, bucket_size: int, quota: int, duration: int):
-            delay = self._leaky_bucket(
+        def _get_delay(
+            key: str, bucket_size: int, quota: int, duration: int
+        ) -> CountDown:
+            delay = self._script_loader.leaky_bucket(
                 keys=(key, _waiting_key(key)), args=(bucket_size, quota, duration)
             )
+            delay = ty.cast(CountDown, delay)
             return delay
 
         def _schedule_task(
@@ -273,7 +302,7 @@ class RedisHandler(ThrottleHandler, RedisScriptLoader):
         return _schedule_task
 
     def clear(self, keyspace: str = "") -> None:
-        self._clear_keyspace(keys=tuple(), args=(f"{keyspace}:*",))
+        self._script_loader.clear_keyspace(keys=tuple(), args=(f"{keyspace}:*",))
 
     @classmethod
     def from_url(cls, url: str):
@@ -281,44 +310,55 @@ class RedisHandler(ThrottleHandler, RedisScriptLoader):
         return cls(redis=redis)
 
 
-class AsyncRedisThrottler(AsyncRedisScriptLoader, AsyncThrottleHandler):
-    _fixed_window_script: ty.Callable[..., ty.Awaitable[CountDown]]  # type: ignore
-    _sliding_window: ty.Callable[..., ty.Awaitable[CountDown]]  # type: ignore
-    _token_bucket: ty.Callable[..., ty.Awaitable[CountDown]]  # type: ignore
-    _leaky_bucket: ty.Callable[..., ty.Awaitable[CountDown]]  # type: ignore
-    _leaky_bucket_decr: ty.Callable[..., ty.Awaitable[None]]  # type: ignore
-
-    def __init__(self, redis: AIORedis):
-        super().__init__(redis)
-        self._loop = asyncio.get_event_loop()
+class AsyncRedisHandler(AsyncThrottleHandler):
+    def __init__(
+        self,
+        redis: AIORedis,
+        *,
+        script_loader: RedisScriptLoader[AIORedis] | None = None,
+    ):
+        self._redis = redis
+        self._script_loader = script_loader or RedisScriptLoader(redis)
+        # self._loop = asyncio.get_event_loop()
 
     async def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
-        res = await self._fixed_window_script(keys=(key,), args=(quota, duration))
+        res = await self._script_loader.fixed_window_script(
+            keys=(key,), args=(quota, duration)
+        )
+        res = ty.cast(CountDown, res)
         return res
 
     async def sliding_window(self, key: str, quota: int, duration: int) -> CountDown:
-        res = await self._sliding_window(keys=(key,), args=(quota, duration))
+        res = await self._script_loader.sliding_window(
+            keys=(key,), args=(quota, duration)
+        )
+        res = ty.cast(CountDown, res)
         return res
 
     async def token_bucket(self, key: str, quota: int, duration: int) -> CountDown:
-        res = await self._token_bucket(keys=(key,), args=(quota, duration))
+        res = await self._script_loader.token_bucket(
+            keys=(key,), args=(quota, duration)
+        )
+        res = ty.cast(CountDown, res)
         return res
 
-    async def leaky_bucket(
+    def leaky_bucket(
         self, key: str, bucket_size: int, quota: int, duration: int
-    ) -> ty.Awaitable[TaskScheduler]:
-
+    ) -> AsyncTaskScheduler:
         def _waiting_key(key: ty.Hashable) -> str:
             return f"{key}:waiting_task"
 
         async def _decrase_level(key: ty.Hashable) -> None:
             wkey = _waiting_key(key)
-            await self._leaky_bucket_decr(keys=(wkey,), args=tuple())
+            await self._script_loader.leaky_bucket_decr(keys=(wkey,), args=tuple())
 
-        async def _get_delay(key: str, bucket_size: int, quota: int, duration: int):
-            delay = await self._leaky_bucket(
+        async def _get_delay(
+            key: str, bucket_size: int, quota: int, duration: int
+        ) -> float:
+            delay = await self._script_loader.leaky_bucket(
                 keys=(key, _waiting_key(key)), args=(bucket_size, quota, duration)
             )
+            delay = ty.cast(CountDown, delay)
             return delay
 
         async def _schedule_task(
@@ -346,8 +386,7 @@ class AsyncRedisThrottler(AsyncRedisScriptLoader, AsyncThrottleHandler):
         return _schedule_task  # type: ignore
 
     async def clear(self, keyspace: str = "") -> None:
-        # TODO: use register script
-        self._clear_keyspace(keys=tuple(), args=(f"{keyspace}:*",))
+        await self._script_loader.clear_keyspace(keys=tuple(), args=(f"{keyspace}:*",))
 
     @classmethod
     def from_url(cls, url: str):

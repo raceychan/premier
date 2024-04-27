@@ -27,18 +27,16 @@ TaskScheduler = ty.Callable[..., None]
 AsyncTaskScheduler = ty.Callable[..., ty.Awaitable[None]]
 
 
-@ty.runtime_checkable
-class AsyncFunc(ty.Protocol[P, R]):
-    __name__: str
-
-    async def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
-
-
-@ty.runtime_checkable
 class SyncFunc(ty.Protocol[P, R]):
     __name__: str
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
+
+
+class AsyncFunc(ty.Protocol[P, R]):
+    __name__: str
+
+    async def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
 
 
 AnySyncFunc = SyncFunc[..., ty.Any]
@@ -186,6 +184,10 @@ class ThrottleHandler(ABC):
     def clear(self, keyspace: str = "") -> None:
         pass
 
+    @abstractmethod
+    def close(self) -> None:
+        pass
+
     def dispatch(self, algo: ThrottleAlgo):
         "does not handle leaky bucket case"
         match algo:
@@ -221,6 +223,10 @@ class AsyncThrottleHandler(ABC):
 
     @abstractmethod
     async def clear(self, keyspace: str = "") -> None:
+        pass
+
+    @abstractmethod
+    async def close(self) -> None:
         pass
 
     def dispatch(self, algo: ThrottleAlgo):

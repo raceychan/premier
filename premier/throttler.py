@@ -4,7 +4,7 @@ import typing as ty
 from functools import wraps
 
 from premier._types import AsyncFunc, KeyMaker, P, R, SyncFunc, ThrottleAlgo, make_key
-from premier.handlers import (  # AsyncDefaultThrottler,
+from premier.handlers import (
     AsyncThrottleHandler,
     DefaultHandler,
     QuotaExceedsError,
@@ -12,7 +12,7 @@ from premier.handlers import (  # AsyncDefaultThrottler,
 )
 
 
-class _Throttler:
+class Throttler:
     """
     This is a singleton, we might want to create sub instances
     with different configs
@@ -51,10 +51,17 @@ class _Throttler:
         self.__ready = True
         return self
 
-    def clear(self):
+    def clear(self, keyspace: str = ""):
         if not self._handler:
             return
-        self._handler.clear(self._keyspace)
+        keyspace = keyspace or self._keyspace
+        self._handler.clear(keyspace)
+
+    async def aclear(self, keyspace: str = ""):
+        if not self._aiohandler:
+            return
+        keyspace = keyspace or self._keyspace
+        await self._aiohandler.clear(keyspace)
 
     @ty.overload
     def throttle(
@@ -77,7 +84,7 @@ class _Throttler:
         duration: int,
         keymaker: KeyMaker | None = None,
         bucket_size: int = None,  # type: ignore
-    ) -> ty.Callable[[SyncFunc[P, None]], SyncFunc[P, None]]: ...
+    ) -> ty.Callable[[SyncFunc[P, R]], SyncFunc[P, R]]: ...
 
     def throttle(
         self,
@@ -154,5 +161,46 @@ class _Throttler:
 
         return wrapper
 
+    def fixed_window(self, quota: int, duration: int, keymaker: KeyMaker | None = None):
+        return self.throttle(
+            quota=quota,
+            duration=duration,
+            keymaker=keymaker,
+            throttle_algo=ThrottleAlgo.FIXED_WINDOW,
+        )
 
-throttler = _Throttler().config(DefaultHandler(dict()))
+    def sliding_window(
+        self, quota: int, duration: int, keymaker: KeyMaker | None = None
+    ):
+        return self.throttle(
+            quota=quota,
+            duration=duration,
+            keymaker=keymaker,
+            throttle_algo=ThrottleAlgo.SLIDING_WINDOW,
+        )
+
+    def token_bucket(self, quota: int, duration: int, keymaker: KeyMaker | None = None):
+        return self.throttle(
+            quota=quota,
+            duration=duration,
+            keymaker=keymaker,
+            throttle_algo=ThrottleAlgo.TOKEN_BUCKET,
+        )
+
+    def leaky_bucket(
+        self,
+        quota: int,
+        bucket_size: int,
+        duration: int,
+        keymaker: KeyMaker | None = None,
+    ):
+        return self.throttle(
+            bucket_size=bucket_size,
+            quota=quota,
+            duration=duration,
+            keymaker=keymaker,
+            throttle_algo=ThrottleAlgo.LEAKY_BUCKET,
+        )
+
+
+throttler = Throttler().config(DefaultHandler())

@@ -9,5 +9,5 @@ from .handlers import BucketFullError as BucketFullError
 from .handlers import DefaultHandler as DefaultHandler
 from .handlers import QuotaExceedsError as QuotaExceedsError
 from .handlers import RedisHandler as RedisHandler
+from .throttler import Throttler as Throttler
 from .throttler import throttler as throttler
-from .throttler import _Throttler

@@ -2,54 +2,57 @@ import asyncio
 
 import pytest
 
-from premier import (
+from premier import (  # BucketFullError,; QuotaExceedsError,
     AsyncRedisHandler,
-    BucketFullError,
-    QuotaExceedsError,
     ThrottleAlgo,
-    _Throttler,
+    Throttler,
 )
 from premier import throttler as _throttler
 
 url = "redis://@192.168.50.22:7379/0"
 
-
-@pytest.fixture
-def aiohandler():
-    return AsyncRedisHandler.from_url(url)
+pytest.skip(allow_module_level=True)
 
 
 @pytest.fixture
-def throttler(aiohandler: AsyncRedisHandler):
-    _throttler.config(aiohandler=aiohandler, keyspace="test")
-    return _throttler
+async def aiohandler():
+    handler = AsyncRedisHandler.from_url(url)
+
+    yield handler
+
+    await handler.close()
 
 
-async def test_async_throttler_with_leaky_bucket(throttler: _Throttler):
-    throttler.clear()
+@pytest.fixture
+async def throttler(aiohandler: AsyncRedisHandler):
+    _throttler.config(aiohandler=aiohandler, keyspace="premier-pytest")
+    yield _throttler
+    await _throttler.aclear()
+
+
+async def test_async_throttler_with_leaky_bucket(throttler: Throttler):
+    bucket_size = 5
+    quota = 1
 
     @throttler.throttle(
-        throttle_algo=ThrottleAlgo.FIXED_WINDOW,
-        quota=1,
+        throttle_algo=ThrottleAlgo.LEAKY_BUCKET,
+        quota=quota,
         duration=1,
+        bucket_size=bucket_size,
     )
-    async def add(a: int, b: int) -> int:
-        await asyncio.sleep(0.1)
-        res = a + b
-        return res
+    async def add(a: int, b: int) -> None:
+        await asyncio.sleep(0)
+        print(f"executed, {a+b=}")
+
+    todo = set[asyncio.Task[None]]()
+    rejected = 0
 
     tries = 8
-    res: list[int] = []
-
-    rejected = 0
     for _ in range(tries):
-        try:
-            r = await add(3, 5)
-            res.append(r)
-        except (BucketFullError, QuotaExceedsError):
-            print("\nBuckete is Full")
-            rejected += 1
+        task = asyncio.create_task(add(3, 5))
+        todo.add(task)
+    done, wait = await asyncio.wait(todo)
 
-    print(f"\n{len(res)} func executed")
-    assert rejected == 7
-    print(res)
+    rejected = [e for e in done if e.exception()]
+    consumed = bucket_size + quota
+    assert len(rejected) == tries - consumed

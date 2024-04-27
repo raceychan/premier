@@ -87,9 +87,10 @@ def token_bucket(quota: int, duration_s: int, keymaker: KeyMaker | None = None):
 def leaky_bucket(
     bucket_size: int, quota: int, duration_s: int, keymaker: KeyMaker | None = None
 ):
-    return throttler.leaky_bucket(
+    return throttler.throttle(
         bucket_size=bucket_size,
         quota=quota,
-        duration_s=duration_s,
+        throttle_algo=ThrottleAlgo.LEAKY_BUCKET,
+        duration=duration_s,
         keymaker=keymaker,
     )

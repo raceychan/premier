@@ -2,39 +2,16 @@ import asyncio
 
 import pytest
 
-from premier import (  # BucketFullError,; QuotaExceedsError,
-    AsyncRedisHandler,
-    ThrottleAlgo,
-    Throttler,
-)
-from premier import throttler as _throttler
-
-url = "redis://@192.168.50.22:7379/0"
+from premier import ThrottleAlgo, Throttler  # BucketFullError,; QuotaExceedsError,
 
 pytest.skip(allow_module_level=True)
 
 
-@pytest.fixture
-async def aiohandler():
-    handler = AsyncRedisHandler.from_url(url)
-
-    yield handler
-
-    await handler.close()
-
-
-@pytest.fixture
-async def throttler(aiohandler: AsyncRedisHandler):
-    _throttler.config(aiohandler=aiohandler, keyspace="premier-pytest")
-    yield _throttler
-    await _throttler.aclear()
-
-
-async def test_async_throttler_with_leaky_bucket(throttler: Throttler):
+async def test_async_throttler_with_leaky_bucket(aiothrottler: Throttler):
     bucket_size = 5
     quota = 1
 
-    @throttler.throttle(
+    @aiothrottler.throttle(
         throttle_algo=ThrottleAlgo.LEAKY_BUCKET,
         quota=quota,
         duration=1,
@@ -51,7 +28,7 @@ async def test_async_throttler_with_leaky_bucket(throttler: Throttler):
     for _ in range(tries):
         task = asyncio.create_task(add(3, 5))
         todo.add(task)
-    done, wait = await asyncio.wait(todo)
+    done, _ = await asyncio.wait(todo)
 
     rejected = [e for e in done if e.exception()]
     consumed = bucket_size + quota

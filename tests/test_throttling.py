@@ -1,30 +1,10 @@
 import time
 
 import pytest
-from redis import Redis
 
-from premier import BucketFullError
-from premier import DefaultHandler as DefaultHandler
-from premier import QuotaExceedsError, RedisHandler, Throttler
-from premier import throttler as _throttler
+from premier import BucketFullError, QuotaExceedsError, Throttler
 
 # pytest.skip(allow_module_level=True)
-
-
-@pytest.fixture
-def redis_handler():
-    url = "redis://@192.168.50.22:7379/0"
-    redis = Redis.from_url(url)  # type: ignore
-    handler = RedisHandler(redis=redis)
-    yield handler
-    handler.close()
-
-
-@pytest.fixture
-def throttler(redis_handler: RedisHandler):
-    _throttler.config(handler=None, keyspace="test")
-    yield _throttler
-    # _throttler.clear()
 
 
 def _keymaker(a: int, b: int) -> str:
@@ -62,7 +42,7 @@ def test_method(throttler: Throttler):
 
 
 @pytest.mark.skip
-async def test_throttler_do_not_raise_error(throttler: Throttler):
+def test_throttler_do_not_raise_error(throttler: Throttler):
     throttler.clear()
 
     @throttler.fixed_window(quota=3, duration=5)
@@ -77,7 +57,7 @@ async def test_throttler_do_not_raise_error(throttler: Throttler):
     assert len(res) == tries
 
 
-async def test_throttler_do_not_raise_error_with_interval(throttler: Throttler):
+def test_throttler_do_not_raise_error_with_interval(throttler: Throttler):
     throttler.clear()
 
     @throttler.fixed_window(quota=3, duration=5)
@@ -90,7 +70,7 @@ async def test_throttler_do_not_raise_error_with_interval(throttler: Throttler):
     assert len(res) == tries
 
 
-async def test_throttler_with_keymaker(throttler: Throttler):
+def test_throttler_with_keymaker(throttler: Throttler):
 
     @throttler.fixed_window(quota=3, duration=5, keymaker=_keymaker)
     def add(a: int, b: int) -> int:
@@ -124,7 +104,7 @@ def test_throttler_with_token_bucket(throttler: Throttler):
 def test_throttler_with_leaky_bucket(throttler: Throttler):
     throttler.clear()
 
-    bucket_size = 5
+    bucket_size = 3
     quota = 1
     duration = 1
 
@@ -137,7 +117,7 @@ def test_throttler_with_leaky_bucket(throttler: Throttler):
     def add(a: int, b: int) -> None:
         time.sleep(0.1)
 
-    tries = 8
+    tries = 5
     res: list[int | None] = []
 
     rejected = 0

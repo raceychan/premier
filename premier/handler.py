@@ -1,5 +1,5 @@
 import asyncio
-import threading
+import queue
 import time
 import typing as ty
 from concurrent.futures import ThreadPoolExecutor
@@ -10,40 +10,27 @@ from redis.asyncio.client import Redis as AIORedis
 from redis.client import Redis
 from redis.exceptions import ResponseError as RedisExceptionResponse
 
-from premier._logs import logger
+from premier._logs import logger as logger
 from premier._types import (
     AsyncTaskScheduler,
     AsyncThrottleHandler,
     CountDown,
     P,
     R,
+    TaskQueue,
     TaskScheduler,
     ThrottleHandler,
 )
+from premier.errors import BucketFullError
+from premier.task_queue import RedisQueue
 
 RedisClient = ty.TypeVar("RedisClient", Redis, AIORedis)
-
-import queue
-
-
-class QuotaExceedsError(Exception):
-    time_remains: float
-
-    def __init__(self, quota: int, duration_s: int, time_remains: float):
-        msg = f"You exceeds {quota} quota in {duration_s} seconds, available after {time_remains:.2f} s"
-        self.time_remains = time_remains
-        super().__init__(msg)
-
-
-class BucketFullError(QuotaExceedsError):
-    def __init__(self, msg: str):
-        self.msg = msg
 
 
 class DefaultHandler(ThrottleHandler):
     def __init__(self, counter: dict[ty.Hashable, ty.Any] | None = None):
         self._counter = counter or dict[ty.Hashable, ty.Any]()
-        self._queues: dict[ty.Hashable, queue.Queue[ty.Any]] = dict()
+        self._queue_registry: dict[ty.Hashable, TaskQueue[ty.Any]] = dict()
         self._executors = ThreadPoolExecutor()
 
     def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
@@ -101,10 +88,9 @@ class DefaultHandler(ThrottleHandler):
     def leaky_bucket(
         self, key: str, bucket_size: int, quota: int, duration: int
     ) -> TaskScheduler:
-
-        task_queue = self._queues.get(key, None)
+        task_queue = self._queue_registry.get(key, None)
         if not task_queue:
-            task_queue = self._queues[key] = queue.Queue(maxsize=bucket_size)
+            task_queue = self._queue_registry[key] = queue.Queue(maxsize=bucket_size)
 
         def _calculate_delay(key: ty.Hashable, quota: int, duration: int) -> CountDown:
             now = clock()
@@ -124,9 +110,8 @@ class DefaultHandler(ThrottleHandler):
             while (delay := _calculate_delay(key, quota, duration)) > 0:
                 time.sleep(delay)
 
-            args, kwargs = task_queue.get(block=False)
-            logger.debug(f"executing, {args=}, {kwargs=}")
-            func(*args, **kwargs)
+            args, kwargs = task_queue.get(block=False) or ((), {})  # type: ignore
+            _ = func(*args, **kwargs)
 
         def _schedule_task(
             func: ty.Callable[P, R], *args: P.args, **kwargs: P.kwargs
@@ -136,7 +121,7 @@ class DefaultHandler(ThrottleHandler):
             except queue.Full:
                 raise BucketFullError("Bucket is full. Cannot add more tasks.")
 
-            self._executors.submit(_poll_and_execute, func)
+            self._executors.submit(_poll_and_execute, func)  # type: ignore
 
         return _schedule_task
 
@@ -150,6 +135,9 @@ class DefaultHandler(ThrottleHandler):
 
     def close(self) -> None:
         del self._counter
+
+
+# ====================== Redis ================================
 
 
 class RedisScriptLoader(ty.Generic[RedisClient]):
@@ -218,7 +206,8 @@ class RedisHandler(ThrottleHandler):
     ):
         self._redis = redis
         self._script_loader = script_loader or RedisScriptLoader(redis)
-        # self._executor = ThreadPoolExecutor(max_workers=5)
+        self._executor = ThreadPoolExecutor()
+        self._queue_registry: dict[ty.Hashable, RedisQueue] = {}
 
     def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
         res = self._script_loader.fixed_window_script(
@@ -240,46 +229,33 @@ class RedisHandler(ThrottleHandler):
     def leaky_bucket(
         self, key: str, bucket_size: int, quota: int, duration: int
     ) -> TaskScheduler:
-
-        def _waiting_key(key: ty.Hashable) -> str:
-            return f"{key}:waiting_task"
-
-        def _decrase_level(key: ty.Hashable) -> None:
-            wkey = _waiting_key(key)
-            self._script_loader.leaky_bucket_decr(keys=(wkey,), args=tuple())
-
-        def _get_delay(
-            key: str, bucket_size: int, quota: int, duration: int
-        ) -> CountDown:
-            delay = self._script_loader.leaky_bucket(
-                keys=(key, _waiting_key(key)), args=(bucket_size, quota, duration)
+        task_queue = self._queue_registry.get(key, None)
+        if not task_queue:
+            task_queue = self._queue_registry[key] = RedisQueue(
+                self._redis, name=key, queue_size=bucket_size
             )
+
+        def _calculate_delay(key: str, quota: int, duration: int) -> CountDown:
+            delay = self._script_loader.leaky_bucket(keys=(key), args=(quota, duration))
             delay = ty.cast(CountDown, delay)
             return delay
+
+        def _poll_and_execute(func: ty.Callable[..., None]) -> None:
+            while (delay := _calculate_delay(key, quota, duration)) > 0:
+                time.sleep(delay)
+
+            args, kwargs = task_queue.get(block=False) or ((), {})  # type: ignore
+            _ = func(*args, **kwargs)
 
         def _schedule_task(
             func: ty.Callable[P, R], *args: P.args, **kwargs: P.kwargs
         ) -> None:
-
             try:
-                delay = _get_delay(key, bucket_size, quota, duration)
-            except RedisExceptionResponse as redis_exc_resp:
-                _, wait_num = redis_exc_resp.args[0].split(": ")
-                raise BucketFullError(
-                    f"Bucket is full. Cannot add more tasks. {wait_num} tasks in queue"
-                )
+                task_queue.put((args, kwargs), block=False)
+            except queue.Full:
+                raise BucketFullError("Bucket is full. Cannot add more tasks.")
 
-            if delay == -1:
-                try:  # ignore the result in current implementation
-                    _ = func(*args, **kwargs)
-                    return None
-                finally:
-                    _decrase_level(key)
-            else:
-                timer = threading.Timer(
-                    delay, _schedule_task, args=(func, *args), kwargs=kwargs
-                )
-                timer.start()
+            self._executors.submit(_poll_and_execute, func)  # type: ignore
 
         return _schedule_task
 
@@ -343,14 +319,6 @@ class AsyncRedisHandler(AsyncThrottleHandler):
         Have a consumer that periodically checks the sorted set and moves tasks that are due to the main queue:
         ZRANGEBYSCORE delayedqueue 0 <current_time>
         RPOPLPUSH tempqueue myqueue
-        """
-
-        """
-        def schedule_task():
-            self._queue.put(task) # if queue full raise exception
-            while delay := get_delay() > 0:
-                time.sleep(delay)
-            execute(self._queue.pop(task))
         """
 
         def _waiting_key(key: ty.Hashable) -> str:

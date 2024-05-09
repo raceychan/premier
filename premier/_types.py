@@ -7,24 +7,25 @@ from types import FunctionType, MethodType
 T = ty.TypeVar("T")
 P = ty.ParamSpec("P")
 R = ty.TypeVar("R", covariant=True)
+QueueItem = ty.TypeVar("QueueItem", contravariant=True)
 
 
 KeyMaker = ty.Callable[..., str]
 CountDown = ty.Literal[-1] | float
 
 
-KeysT = ty.TypeVar(
-    "KeysT", bound=ty.Sequence[bytes | str | memoryview], contravariant=True
-)
-ArgsT = ty.TypeVar(
-    "ArgsT",
-    bound=ty.Iterable[str | int | float | bytes | memoryview],
-    contravariant=True,
-)
-ResultT = ty.TypeVar("ResultT", bound=ty.Any, covariant=True)
-
 TaskScheduler = ty.Callable[..., None]
 AsyncTaskScheduler = ty.Callable[..., ty.Awaitable[None]]
+
+
+class TaskQueue(ty.Protocol, ty.Generic[QueueItem]):
+    def qsize(self) -> int: ...
+    def empty(self) -> bool: ...
+    def put(
+        self, item: QueueItem, block: bool = True, timeout: float | None = None
+    ): ...
+    def get(self, block: bool = True, timeout: float | None = None): ...
+    def full(self) -> bool: ...
 
 
 class SyncFunc(ty.Protocol[P, R]):
@@ -63,34 +64,6 @@ def func_keymaker(
     return f"{keyspace}:{algo.value}:{func.__module__}:{fid}"
 
 
-class ScriptFunc(ty.Protocol, ty.Generic[KeysT, ArgsT, ResultT]):
-    def __call__(self, keys: KeysT, args: ArgsT) -> ResultT:
-        raise NotImplementedError
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ThrottleInfo:
-    func: AnySyncFunc | AnyAsyncFunc
-    keyspace: str
-    algo: "ThrottleAlgo"
-
-    @property
-    def funckey(self):
-        return func_keymaker(self.func, self.algo, self.keyspace)
-
-    def make_key(
-        self,
-        keymaker: KeyMaker | None,
-        args: tuple[object, ...],
-        kwargs: dict[ty.Any, ty.Any],
-    ) -> str:
-        key = self.funckey
-        if not keymaker:
-            return key
-
-        return f"{key}:{keymaker(*args, **kwargs)}"
-
-
 def make_key(
     func: AnySyncFunc | AnyAsyncFunc,
     algo: "ThrottleAlgo",
@@ -103,11 +76,6 @@ def make_key(
     if not keymaker:
         return key
     return f"{key}:{keymaker(*args, **kwargs)}"
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class LBThrottleInfo(ThrottleInfo):
-    bucket_size: int
 
 
 @dataclass(kw_only=True)

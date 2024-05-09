@@ -4,12 +4,8 @@ import typing as ty
 from functools import wraps
 
 from premier._types import AsyncFunc, KeyMaker, P, R, SyncFunc, ThrottleAlgo, make_key
-from premier.handlers import (
-    AsyncThrottleHandler,
-    DefaultHandler,
-    QuotaExceedsError,
-    ThrottleHandler,
-)
+from premier.errors import QuotaExceedsError, UninitializedHandlerError
+from premier.handler import AsyncThrottleHandler, DefaultHandler, ThrottleHandler
 
 
 class Throttler:
@@ -136,7 +132,7 @@ class Throttler:
                 nonlocal func
                 func = ty.cast(AsyncFunc[P, R], func)
                 if not self._aiohandler:
-                    raise Exception("Async handler not configured")
+                    raise UninitializedHandlerError("Async handler not configured")
                 key = make_key(
                     func,
                     algo=throttle_algo,

@@ -37,7 +37,7 @@ def test_method(throttler: Throttler):
     tries = 4
     t = T()
     with pytest.raises(QuotaExceedsError):
-        res = [t.add(3, 5) for _ in range(tries)]
+        res: list[None] = [t.add(3, 5) for _ in range(tries)]
         assert len(res) <= quota
 
 

@@ -17,9 +17,9 @@ def redis_handler():
 
 @pytest.fixture
 def throttler(redis_handler: RedisHandler):
-    _throttler.config(handler=None, keyspace="test")
+    _throttler.config(handler=redis_handler, keyspace="test")
     yield _throttler
-    # _throttler.clear()
+    _throttler.clear()
 
 
 @pytest.fixture

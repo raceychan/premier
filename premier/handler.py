@@ -244,18 +244,23 @@ class RedisHandler(ThrottleHandler):
             while (delay := _calculate_delay(key, quota, duration)) > 0:
                 time.sleep(delay)
 
-            args, kwargs = task_queue.get(block=False) or ((), {})  # type: ignore
+            args, kwargs = task_queue.get(block=False) or (
+                (),
+                {},
+            )
+            # needs to be deserialized
             _ = func(*args, **kwargs)
 
         def _schedule_task(
             func: ty.Callable[P, R], *args: P.args, **kwargs: P.kwargs
         ) -> None:
             try:
+                # needs to serialize
                 task_queue.put((args, kwargs), block=False)
             except queue.Full:
                 raise BucketFullError("Bucket is full. Cannot add more tasks.")
 
-            self._executors.submit(_poll_and_execute, func)  # type: ignore
+            self._executor.submit(_poll_and_execute, func)
 
         return _schedule_task
 

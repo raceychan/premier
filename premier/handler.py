@@ -1,4 +1,5 @@
 import asyncio
+import json
 import queue
 import time
 import typing as ty
@@ -22,9 +23,17 @@ from premier._types import (
     ThrottleHandler,
 )
 from premier.errors import BucketFullError
-from premier.task_queue import RedisQueue
+from premier.task_queue import AsyncRedisQueue, RedisQueue
 
 RedisClient = ty.TypeVar("RedisClient", Redis, AIORedis)
+
+
+def json_loads(data: bytes) -> ty.Any:
+    return json.loads(data.decode("utf-8"))
+
+
+def json_dumps(data: ty.Any) -> bytes:
+    return json.dumps(data).encode("utf-8")
 
 
 class DefaultHandler(ThrottleHandler):
@@ -125,7 +134,7 @@ class DefaultHandler(ThrottleHandler):
 
         return _schedule_task
 
-    def clear(self, keyspace: str = ""):
+    def clear(self, keyspace: str):
         if not keyspace:
             self._counter.clear()
 
@@ -174,8 +183,13 @@ class RedisScriptLoader(ty.Generic[RedisClient]):
     clear_keyspace_lua: ty.ClassVar[
         str
     ] = """
-    return redis.call('del', unpack(redis.call('keys', ARGV[1])))
-    """
+    local keys = redis.call('keys', ARGV[1])
+    if #keys > 0 then
+        return redis.call('del', unpack(keys))
+    else
+        return 0
+    end
+    """  # remove all keys that match the pattern, ignore if empty
 
     def __init__(self, redis: RedisClient, *, script_path: Path | None = None):
         self._script_path = script_path or Path(__file__).parent / "lua"
@@ -244,19 +258,17 @@ class RedisHandler(ThrottleHandler):
             while (delay := _calculate_delay(key, quota, duration)) > 0:
                 time.sleep(delay)
 
-            args, kwargs = task_queue.get(block=False) or (
-                (),
-                {},
-            )
-            # needs to be deserialized
+            func_args = task_queue.get(block=False)
+            args, kwargs = json_loads(func_args) if func_args else ((), {})
+
             _ = func(*args, **kwargs)
 
         def _schedule_task(
             func: ty.Callable[P, R], *args: P.args, **kwargs: P.kwargs
         ) -> None:
             try:
-                # needs to serialize
-                task_queue.put((args, kwargs), block=False)
+                func_args = json_dumps((args, kwargs))
+                task_queue.put(func_args, block=False)
             except queue.Full:
                 raise BucketFullError("Bucket is full. Cannot add more tasks.")
 
@@ -264,9 +276,8 @@ class RedisHandler(ThrottleHandler):
 
         return _schedule_task
 
-    def clear(self, keyspace: str = "") -> None:
-        arg = f"{keyspace}:*"
-        self._script_loader.clear_keyspace(args=[arg])
+    def clear(self, keyspace: str) -> None:
+        self._script_loader.clear_keyspace(args=(f"{keyspace}:*",))
 
     def close(self) -> None:
         self._redis.close()
@@ -287,6 +298,7 @@ class AsyncRedisHandler(AsyncThrottleHandler):
         self._redis = redis
         self._script_loader = script_loader or RedisScriptLoader(redis)
         # self._loop = asyncio.get_event_loop()
+        self._queue_registry: dict[ty.Hashable, AsyncRedisQueue] = {}
 
     async def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
         res = await self._script_loader.fixed_window_script(  # type: ignore
@@ -312,63 +324,39 @@ class AsyncRedisHandler(AsyncThrottleHandler):
     def leaky_bucket(
         self, key: str, bucket_size: int, quota: int, duration: int
     ) -> AsyncTaskScheduler:
-        """
-        [redis-queue](https://redis.io/glossary/redis-queue/)
-        -----
-        Sometimes, you may want to add a task to the queue but delay its execution until a later time. While Redis does not directly support delayed tasks, you can implement them using sorted sets in combination with regular queues.
+        task_queue = self._queue_registry.get(key, None)
+        if not task_queue:
+            task_queue = self._queue_registry[key] = AsyncRedisQueue(
+                self._redis, name=key, queue_size=bucket_size
+            )
 
-        Here’s how you can schedule a task to be added to the queue after a delay:
-
-        Add the task to a sorted set with a score that represents the time when the task should be executed:
-        ZADD delayedqueue 1633024800 "Task1"
-        Have a consumer that periodically checks the sorted set and moves tasks that are due to the main queue:
-        ZRANGEBYSCORE delayedqueue 0 <current_time>
-        RPOPLPUSH tempqueue myqueue
-        """
-
-        def _waiting_key(key: ty.Hashable) -> str:
-            return f"{key}:waiting_task"
-
-        async def _decrase_level(key: ty.Hashable) -> None:
-            wkey = _waiting_key(key)
-            await self._script_loader.leaky_bucket_decr(keys=(wkey,), args=tuple())
-
-        async def _incrase_level(key: ty.Hashable, size: int) -> None:
-            wkey = _waiting_key(key)
-            await self._script_loader.leaky_bucket_incr(keys=(wkey,), args=(size,))
-
-        async def _get_delay(
-            key: str, bucket_size: int, quota: int, duration: int
-        ) -> float:
-            delay = await self._script_loader.leaky_bucket(  # type: ignore
-                keys=(key, _waiting_key(key)), args=(bucket_size, quota, duration)
+        async def _calculate_delay(key: str, quota: int, duration: int) -> CountDown:
+            delay = await self._script_loader.leaky_bucket(
+                keys=(key), args=(quota, duration)
             )
             delay = ty.cast(CountDown, delay)
             return delay
+
+        async def _poll_and_execute(func: ty.Callable[..., None]) -> None:
+            while (delay := await _calculate_delay(key, quota, duration)) > 0:
+                await asyncio.sleep(delay)
+
+            func_args = task_queue.get(block=False)
+            args, kwargs = json_loads(func_args) if func_args else ((), {})
+
+            _ = func(*args, **kwargs)
 
         async def _schedule_task(
             func: ty.Callable[P, ty.Awaitable[R]], *args: P.args, **kwargs: P.kwargs
         ) -> None:
 
-            delay = await _get_delay(key, bucket_size, quota, duration)
-
-            if delay == -1:
-                try:  # ignore the result in current implementation
-                    _ = await func(*args, **kwargs)
-                    return None
-                finally:
-                    await _decrase_level(key)
-
             try:
-                await _incrase_level(key, bucket_size)
-            except RedisExceptionResponse as redis_exc_resp:
-                _, wait_num = redis_exc_resp.args[0].split(": ")
-                raise BucketFullError(
-                    f"Bucket is full. Cannot add more tasks. {wait_num} tasks in queue"
-                )
+                func_args = json_dumps((args, kwargs))
+                await task_queue.put(func_args, block=False)
+            except queue.Full:
+                raise BucketFullError("Bucket is full. Cannot add more tasks.")
 
-            await asyncio.sleep(delay)
-            await _schedule_task(func, *args, **kwargs)
+            await _poll_and_execute(func)
 
         return _schedule_task  # type: ignore
 
@@ -376,7 +364,7 @@ class AsyncRedisHandler(AsyncThrottleHandler):
         await self._redis.aclose()
 
     async def clear(self, keyspace: str = "") -> None:
-        await self._script_loader.clear_keyspace(keys=tuple(), args=(f"{keyspace}:*",))
+        await self._script_loader.clear_keyspace(args=(f"{keyspace}:*",))
 
     @classmethod
     def from_url(cls, url: str):

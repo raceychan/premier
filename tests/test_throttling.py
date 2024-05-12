@@ -6,11 +6,6 @@ from premier import BucketFullError, QuotaExceedsError, Throttler
 
 # pytest.skip(allow_module_level=True)
 
-
-def _keymaker(a: int, b: int) -> str:
-    return f"{a}"
-
-
 # def test_throttle_raise_error(throttler: Throttler):
 #     quota = 3
 
@@ -23,6 +18,10 @@ def _keymaker(a: int, b: int) -> str:
 #     with pytest.raises(QuotaExceedsError):
 #         res = [add(3, 5) for _ in range(tries)]
 #         assert len(res) <= quota
+
+
+def _keymaker(a: int, b: int) -> str:
+    return f"{a}"
 
 
 def test_method(throttler: Throttler):

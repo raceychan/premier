@@ -24,7 +24,7 @@ def throttler(redis_handler: RedisHandler):
 
 @pytest.fixture
 async def aiohandler():
-    handler = AsyncRedisHandler.from_url(url)
+    handler = AsyncRedisHandler.from_url(REDIS_URL)
 
     yield handler
 

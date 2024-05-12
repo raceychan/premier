@@ -149,7 +149,7 @@ class ThrottleHandler(ABC):
         pass
 
     @abstractmethod
-    def clear(self, keyspace: str = "") -> None:
+    def clear(self, keyspace: str) -> None:
         pass
 
     @abstractmethod

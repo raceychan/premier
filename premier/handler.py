@@ -1,10 +1,10 @@
 import asyncio
-import json
 import queue
 import time
 import typing as ty
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import RLock
 from time import perf_counter as clock
 
 from redis.asyncio.client import Redis as AIORedis
@@ -26,14 +26,6 @@ from premier.errors import BucketFullError
 from premier.task_queue import AsyncRedisQueue, RedisQueue
 
 RedisClient = ty.TypeVar("RedisClient", Redis, AIORedis)
-
-
-def json_loads(data: bytes) -> ty.Any:
-    return json.loads(data.decode("utf-8"))
-
-
-def json_dumps(data: ty.Any) -> bytes:
-    return json.dumps(data).encode("utf-8")
 
 
 class DefaultHandler(ThrottleHandler):
@@ -118,8 +110,8 @@ class DefaultHandler(ThrottleHandler):
         def _poll_and_execute(func: ty.Callable[..., None]) -> None:
             while (delay := _calculate_delay(key, quota, duration)) > 0:
                 time.sleep(delay)
-
-            args, kwargs = task_queue.get(block=False) or ((), {})  # type: ignore
+            item = task_queue.get(block=False)
+            args, kwargs = item or ((), {})  # type: ignore
             _ = func(*args, **kwargs)
 
         def _schedule_task(
@@ -222,6 +214,7 @@ class RedisHandler(ThrottleHandler):
         self._script_loader = script_loader or RedisScriptLoader(redis)
         self._executor = ThreadPoolExecutor()
         self._queue_registry: dict[ty.Hashable, RedisQueue] = {}
+        self.__lock = RLock()
 
     def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
         res = self._script_loader.fixed_window_script(
@@ -244,7 +237,7 @@ class RedisHandler(ThrottleHandler):
         self, key: str, bucket_size: int, quota: int, duration: int
     ) -> TaskScheduler:
         task_queue = self._queue_registry.get(key, None)
-        if not task_queue:
+        if task_queue is None:
             task_queue = self._queue_registry[key] = RedisQueue(
                 self._redis, name=key, queue_size=bucket_size
             )
@@ -257,18 +250,15 @@ class RedisHandler(ThrottleHandler):
         def _poll_and_execute(func: ty.Callable[..., None]) -> None:
             while (delay := _calculate_delay(key, quota, duration)) > 0:
                 time.sleep(delay)
-
-            func_args = task_queue.get(block=False)
-            args, kwargs = json_loads(func_args) if func_args else ((), {})
-
+            item = task_queue.get(block=False)
+            args, kwargs = item or ((), {})
             _ = func(*args, **kwargs)
 
         def _schedule_task(
             func: ty.Callable[P, R], *args: P.args, **kwargs: P.kwargs
         ) -> None:
             try:
-                func_args = json_dumps((args, kwargs))
-                task_queue.put(func_args, block=False)
+                task_queue.put((args, kwargs))
             except queue.Full:
                 raise BucketFullError("Bucket is full. Cannot add more tasks.")
 
@@ -297,7 +287,6 @@ class AsyncRedisHandler(AsyncThrottleHandler):
     ):
         self._redis = redis
         self._script_loader = script_loader or RedisScriptLoader(redis)
-        # self._loop = asyncio.get_event_loop()
         self._queue_registry: dict[ty.Hashable, AsyncRedisQueue] = {}
 
     async def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
@@ -334,25 +323,24 @@ class AsyncRedisHandler(AsyncThrottleHandler):
             delay = await self._script_loader.leaky_bucket(
                 keys=(key), args=(quota, duration)
             )
+
             delay = ty.cast(CountDown, delay)
             return delay
 
-        async def _poll_and_execute(func: ty.Callable[..., None]) -> None:
+        async def _poll_and_execute(func: ty.Callable[..., ty.Awaitable[None]]) -> None:
             while (delay := await _calculate_delay(key, quota, duration)) > 0:
                 await asyncio.sleep(delay)
 
-            func_args = task_queue.get(block=False)
-            args, kwargs = json_loads(func_args) if func_args else ((), {})
-
-            _ = func(*args, **kwargs)
+            item = await task_queue.get(block=False)
+            args, kwargs = item or ((), {})
+            _ = await func(*args, **kwargs)
 
         async def _schedule_task(
             func: ty.Callable[P, ty.Awaitable[R]], *args: P.args, **kwargs: P.kwargs
         ) -> None:
 
             try:
-                func_args = json_dumps((args, kwargs))
-                await task_queue.put(func_args, block=False)
+                await task_queue.put((args, kwargs))
             except queue.Full:
                 raise BucketFullError("Bucket is full. Cannot add more tasks.")
 

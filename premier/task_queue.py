@@ -1,5 +1,6 @@
 import json
 import typing as ty
+from threading import RLock
 
 from redis.asyncio.client import Redis as AIORedis
 from redis.client import Redis  # type: ignore
@@ -21,11 +22,38 @@ RPOPLPUSH tempqueue myqueue
 """
 
 
-class RedisQueue:
+def json_loads(data: bytes) -> ty.Any:
+    res = json.loads(data.decode("utf-8"))
+    return res
+
+
+def json_dumps(data: ty.Any) -> bytes:
+    res = json.dumps(data).encode("utf-8")
+    return res
+
+
+class TaskQueue(ty.Protocol):
+    def put(self, item: ty.Any) -> None: ...
+    def get(self, block: bool = True, *, timeout: float = 0) -> ty.Any: ...
+    def qsize(self) -> int: ...
+    def empty(self) -> bool: ...
+    def full(self) -> bool: ...
+
+
+class AsyncTaskQueue(ty.Protocol):
+    async def put(self, item: ty.Any) -> None: ...
+    async def get(self, block: bool = True, *, timeout: float = 0) -> ty.Any: ...
+    async def qsize(self) -> int: ...
+    async def empty(self) -> bool: ...
+    async def full(self) -> bool: ...
+
+
+class RedisQueue(TaskQueue):
     def __init__(self, client: Redis, *, name: str, queue_size: int):
         self._client = client
         self._name = name
         self._size = queue_size
+        self.__lock = RLock()
 
     def qsize(self) -> int:
         """Return the approximate size of the queue."""
@@ -36,44 +64,34 @@ class RedisQueue:
         """Return True if the queue is empty, False otherwise."""
         return self.qsize() == 0
 
-    def put(
-        self, item: ty.Any, block: bool = True, timeout: float | None = None
-    ) -> None:
-        """Put an item into the queue."""
-        if self.full():
-            raise BucketFullError("Bucket is full. Cannot add more items.")
-        serialized_item = json.dumps(item)
-        self._client.lpush(self._name, serialized_item)
-
     def full(self) -> bool:
         return self.qsize() >= self._size
 
-    def get(self, block: bool = True, timeout: float | None = None) -> ty.Any:
+    def get(self, block: bool = True, *, timeout: float = 0) -> ty.Any:
         """Remove and return an item from the queue.
 
         If optional args block is true and timeout is None (the default), block
         if necessary until an item is available.
         """
-        if block:
-            if timeout is None:
-                # Blocking get with no timeout
-                item = self._client.brpop(self._name)
-            else:
-                # Blocking get with a timeout
-                item = self._client.brpop(self._name, timeout=timeout)
-        else:
-            item = self._client.rpop(self._name)
 
-        if item:
-            # brpop returns a tuple (key, value), rpop returns just the value
-            item_value = item[1] if isinstance(item, tuple) else item
-            return json.loads(item_value)
+        item: list[ty.Any] | None
+        if block:
+            key, item = self._client.brpop([self._name], timeout=timeout)  # type: ignore
         else:
-            raise queue.Empty("No items in queue")
+            item = self._client.rpop(self._name)  # type: ignore
+
+        return json_loads(item) if item else None  # type: ignore
+
+    def put(self, item: ty.Any) -> None:
+        """Put an item into the queue."""
+        if self.full():
+            raise BucketFullError("Bucket is full. Cannot add more items.")
+        serialized_item = json_dumps(item)
+        self._client.lpush(self._name, serialized_item)
 
     def clear(self) -> None:
         """Clear all items from the queue."""
-        self._client.delete(self._name)
+        self._client.delete(self._name)  # type: ignore
 
     def close(self) -> None:
         """Close the Redis connection."""
@@ -83,7 +101,7 @@ class RedisQueue:
         self.close()
 
 
-class AsyncRedisQueue:
+class AsyncRedisQueue(AsyncTaskQueue):
     def __init__(self, client: AIORedis, *, name: str, queue_size: int):
         self._client = client
         self._name = name
@@ -91,44 +109,33 @@ class AsyncRedisQueue:
 
     async def qsize(self) -> int:
         """Return the approximate size of the queue."""
-        size = await self._client.llen(self._name)
+        size = await self._client.llen(self._name)  # type: ignore
         return size  # type: ignore
 
     async def empty(self) -> bool:
         """Return True if the queue is empty, False otherwise."""
         return await self.qsize() == 0
 
-    async def put(
-        self, item: ty.Any, block: bool = True, timeout: float | None = None
-    ) -> None:
-        """Put an item into the queue."""
-        if await self.full():
-            raise BucketFullError("Bucket is full. Cannot add more items.")
-        serialized_item = json.dumps(item)
-        await self._client.lpush(self._name, serialized_item)
-
-    async def full(self) -> bool:
-        return await self.qsize() >= self._size
-
-    async def get(self, block: bool = True, timeout: float | None = None) -> ty.Any:
+    async def get(self, block: bool = True, *, timeout: float = 0) -> ty.Any:
         """Remove and return an item from the queue.
 
         If optional args block is true and timeout is None (the default), block
         if necessary until an item is available.
         """
-        if block:
-            if timeout is None:
-                # Blocking get with no timeout
-                item = await self._client.brpop(self._name)
-            else:
-                # Blocking get with a timeout
-                item = await self._client.brpop(self._name, timeout=timeout)
-        else:
-            item = await self._client.rpop(self._name)
 
-        if item:
-            # brpop returns a tuple (key, value), rpop returns just the value
-            item_value = item[1] if isinstance(item, tuple) else item
-            return json.loads(item_value)
+        if block:
+            key, item = await self._client.brpop(self._name, timeout=timeout)  # type: ignore
         else:
-            raise queue.Empty("No items in queue")
+            item = await self._client.rpop(self._name)  # type: ignore
+
+        return json_loads(item) if item else None  # type: ignore
+
+    async def put(self, item: ty.Any) -> None:
+        """Put an item into the queue."""
+        if await self.full():
+            raise BucketFullError("Bucket is full. Cannot add more items.")
+        item_bytes = json_dumps(item)
+        await self._client.lpush(self._name, item_bytes)  # type: ignore
+
+    async def full(self) -> bool:
+        return await self.qsize() >= self._size

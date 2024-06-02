@@ -1,5 +1,4 @@
 import inspect
-import threading
 import typing as ty
 from functools import wraps
 
@@ -17,7 +16,6 @@ class Throttler:
     _handler: ThrottleHandler
     _keyspace: str
     _algo: ThrottleAlgo
-    _lock: threading.Lock
 
     def __init__(self):
         self.__ready = False
@@ -35,28 +33,28 @@ class Throttler:
         handler: ThrottleHandler | None = None,
         *,
         aiohandler: AsyncThrottleHandler | None = None,
-        lock: threading.Lock = threading.Lock(),
         algo: ThrottleAlgo = ThrottleAlgo.FIXED_WINDOW,
         keyspace: str = "premier",
     ):
         self._handler = handler or DefaultHandler()
         self._aiohandler = aiohandler
-        self._lock = lock
         self._algo = algo
         self._keyspace = keyspace
         self.__ready = True
         return self
 
-    def clear(self, keyspace: str = ""):
+    def clear(self, keyspace: str | None = None):
         if not self._handler:
             return
-        keyspace = keyspace or self._keyspace
+        if keyspace is None:
+            keyspace = self._keyspace
         self._handler.clear(keyspace)
 
-    async def aclear(self, keyspace: str = ""):
+    async def aclear(self, keyspace: str | None = None):
         if not self._aiohandler:
             return
-        keyspace = keyspace or self._keyspace
+        if keyspace is None:
+            keyspace = self._keyspace
         await self._aiohandler.clear(keyspace)
 
     @ty.overload

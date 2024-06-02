@@ -1,35 +1,42 @@
 import asyncio
+import logging
 
-import pytest
+import pytest as pytest
 
-from premier import ThrottleAlgo, Throttler  # BucketFullError,; QuotaExceedsError,
+from premier import BucketFullError, Throttler
 
-pytest.skip(allow_module_level=True)
+# pytest.skip(allow_module_level=True)
 
 
-async def test_async_throttler_with_leaky_bucket(aiothrottler: Throttler):
-    bucket_size = 5
+async def test_async_throttler_with_leaky_bucket(
+    aiothrottler: Throttler, logger: logging.Logger
+):
+    bucket_size = 3
     quota = 1
+    duration = 1
 
-    @aiothrottler.throttle(
-        throttle_algo=ThrottleAlgo.LEAKY_BUCKET,
+    @aiothrottler.leaky_bucket(
         quota=quota,
-        duration=1,
+        duration=duration,
         bucket_size=bucket_size,
     )
     async def add(a: int, b: int) -> None:
-        await asyncio.sleep(0)
-        print(f"executed, {a+b=}")
+        await asyncio.sleep(0.1)
+        logger.debug(f"executed, {a+b=}")
 
     todo = set[asyncio.Task[None]]()
     rejected = 0
 
-    tries = 8
+    tries = 6
     for _ in range(tries):
         task = asyncio.create_task(add(3, 5))
         todo.add(task)
     done, _ = await asyncio.wait(todo)
 
-    rejected = [e for e in done if e.exception()]
-    consumed = bucket_size + quota
-    assert len(rejected) == tries - consumed
+    for e in done:
+        try:
+            e.result()
+        except BucketFullError:
+            rejected += 1
+
+    assert rejected == tries - (bucket_size + quota)

@@ -1,9 +1,9 @@
 -- Check bucket state and calculate delay for the next token
 local bucket_key = KEYS[1] -- The key for the bucket state
-local now = tonumber(redis.call('TIME')[1])
 
-local quota = tonumber(ARGV[2])    -- NOTE: this has to be > 0
-local duration = tonumber(ARGV[3]) -- NOTE: this has to be > 0
+local now = tonumber(redis.call('TIME')[1])
+local quota = tonumber(ARGV[1])    -- NOTE: this has to be > 0
+local duration = tonumber(ARGV[2]) -- NOTE: this has to be > 0
 
 
 local last_execution_time = tonumber(redis.call('GET', bucket_key))

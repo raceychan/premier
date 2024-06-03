@@ -1,5 +1,7 @@
 import json
 import typing as ty
+from abc import abstractmethod
+from asyncio import Lock as AsyncLock
 from threading import RLock
 
 from redis.asyncio.client import Redis as AIORedis
@@ -38,6 +40,9 @@ class TaskQueue(ty.Protocol):
     def qsize(self) -> int: ...
     def empty(self) -> bool: ...
     def full(self) -> bool: ...
+    @property
+    @abstractmethod
+    def capacity(self) -> int: ...
 
 
 class AsyncTaskQueue(ty.Protocol):
@@ -46,6 +51,9 @@ class AsyncTaskQueue(ty.Protocol):
     async def qsize(self) -> int: ...
     async def empty(self) -> bool: ...
     async def full(self) -> bool: ...
+    @property
+    @abstractmethod
+    def capacity(self) -> int: ...
 
 
 class RedisQueue(TaskQueue):
@@ -63,6 +71,10 @@ class RedisQueue(TaskQueue):
     def empty(self) -> bool:
         """Return True if the queue is empty, False otherwise."""
         return self.qsize() == 0
+
+    @property
+    def capacity(self) -> int:
+        return self._size
 
     def full(self) -> bool:
         return self.qsize() >= self._size
@@ -84,10 +96,11 @@ class RedisQueue(TaskQueue):
 
     def put(self, item: ty.Any) -> None:
         """Put an item into the queue."""
-        if self.full():
-            raise BucketFullError("Bucket is full. Cannot add more items.")
-        serialized_item = json_dumps(item)
-        self._client.lpush(self._name, serialized_item)
+        item_bytes = json_dumps(item)
+        with self.__lock:
+            if self.full():
+                raise BucketFullError("Bucket is full. Cannot add more items.")
+            self._client.lpush(self._name, item_bytes)
 
     def clear(self) -> None:
         """Clear all items from the queue."""
@@ -106,6 +119,11 @@ class AsyncRedisQueue(AsyncTaskQueue):
         self._client = client
         self._name = name
         self._size = queue_size
+        self.__lock = AsyncLock()
+
+    @property
+    def capacity(self) -> int:
+        return self._size
 
     async def qsize(self) -> int:
         """Return the approximate size of the queue."""
@@ -132,10 +150,11 @@ class AsyncRedisQueue(AsyncTaskQueue):
 
     async def put(self, item: ty.Any) -> None:
         """Put an item into the queue."""
-        if await self.full():
-            raise BucketFullError("Bucket is full. Cannot add more items.")
         item_bytes = json_dumps(item)
-        await self._client.lpush(self._name, item_bytes)  # type: ignore
+        async with self.__lock:
+            if await self.full():
+                raise BucketFullError("Bucket is full. Cannot add more items.")
+            await self._client.lpush(self._name, item_bytes)  # type: ignore
 
     async def full(self) -> bool:
         return await self.qsize() >= self._size

@@ -9,7 +9,6 @@ from time import perf_counter as clock
 
 from redis.asyncio.client import Redis as AIORedis
 from redis.client import Redis
-from redis.exceptions import ResponseError as RedisExceptionResponse
 
 from premier._logs import logger as logger
 from premier._types import (
@@ -24,6 +23,9 @@ from premier._types import (
 )
 from premier.errors import BucketFullError
 from premier.task_queue import AsyncRedisQueue, RedisQueue
+
+# from redis.exceptions import ResponseError as RedisExceptionResponse
+
 
 RedisClient = ty.TypeVar("RedisClient", Redis, AIORedis)
 

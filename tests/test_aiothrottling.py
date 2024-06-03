@@ -22,7 +22,6 @@ async def test_async_throttler_with_leaky_bucket(
     )
     async def add(a: int, b: int) -> None:
         await asyncio.sleep(0.1)
-        logger.debug(f"executed, {a+b=}")
 
     todo = set[asyncio.Task[None]]()
     rejected = 0

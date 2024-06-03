@@ -5,7 +5,7 @@ import pytest
 
 from premier import BucketFullError, QuotaExceedsError, Throttler
 
-pytest.skip(allow_module_level=True)
+# pytest.skip(allow_module_level=True)
 
 
 def _keymaker(a: int, b: int) -> str:
@@ -117,7 +117,6 @@ def test_throttler_with_leaky_bucket(throttler: Throttler, logger: logging.Logge
     )
     def add(a: int, b: int) -> None:
         time.sleep(0.1)
-        logger.debug(f"leaky bucket add executed, {a+b=}")
 
     tries = 6
     rejected = 0

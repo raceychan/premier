@@ -1,27 +1,13 @@
+import abc
 import json
 import typing as ty
-from abc import abstractmethod
 from asyncio import Lock as AsyncLock
 from threading import RLock
 
 from redis.asyncio.client import Redis as AIORedis
 from redis.client import Redis  # type: ignore
 
-from premier.errors import BucketFullError
-
-__REF = """
-[redis-queue](https://redis.io/glossary/redis-queue/)
------
-Sometimes, you may want to add a task to the queue but delay its execution until a later time. While Redis does not directly support delayed tasks, you can implement them using sorted sets in combination with regular queues.
-
-Here’s how you can schedule a task to be added to the queue after a delay:
-
-Add the task to a sorted set with a score that represents the time when the task should be executed:
-ZADD delayedqueue 1633024800 "Task1"
-Have a consumer that periodically checks the sorted set and moves tasks that are due to the main queue:
-ZRANGEBYSCORE delayedqueue 0 <current_time>
-RPOPLPUSH tempqueue myqueue
-"""
+from premier.errors import QueueFullError
 
 
 def json_loads(data: bytes) -> ty.Any:
@@ -41,7 +27,7 @@ class TaskQueue(ty.Protocol):
     def empty(self) -> bool: ...
     def full(self) -> bool: ...
     @property
-    @abstractmethod
+    @abc.abstractmethod
     def capacity(self) -> int: ...
 
 
@@ -52,7 +38,7 @@ class AsyncTaskQueue(ty.Protocol):
     async def empty(self) -> bool: ...
     async def full(self) -> bool: ...
     @property
-    @abstractmethod
+    @abc.abstractmethod
     def capacity(self) -> int: ...
 
 
@@ -81,11 +67,9 @@ class RedisQueue(TaskQueue):
 
     def get(self, block: bool = True, *, timeout: float = 0) -> ty.Any:
         """Remove and return an item from the queue.
-
         If optional args block is true and timeout is None (the default), block
         if necessary until an item is available.
         """
-
         item: list[ty.Any] | None
         if block:
             key, item = self._client.brpop([self._name], timeout=timeout)  # type: ignore
@@ -99,7 +83,7 @@ class RedisQueue(TaskQueue):
         item_bytes = json_dumps(item)
         with self.__lock:
             if self.full():
-                raise BucketFullError("Bucket is full. Cannot add more items.")
+                raise QueueFullError("Bucket is full. Cannot add more items.")
             self._client.lpush(self._name, item_bytes)
 
     def clear(self) -> None:
@@ -136,7 +120,6 @@ class AsyncRedisQueue(AsyncTaskQueue):
 
     async def get(self, block: bool = True, *, timeout: float = 0) -> ty.Any:
         """Remove and return an item from the queue.
-
         If optional args block is true and timeout is None (the default), block
         if necessary until an item is available.
         """
@@ -153,7 +136,7 @@ class AsyncRedisQueue(AsyncTaskQueue):
         item_bytes = json_dumps(item)
         async with self.__lock:
             if await self.full():
-                raise BucketFullError("Bucket is full. Cannot add more items.")
+                raise QueueFullError("Bucket is full. Cannot add more items.")
             await self._client.lpush(self._name, item_bytes)  # type: ignore
 
     async def full(self) -> bool:

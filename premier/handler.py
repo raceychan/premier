@@ -4,7 +4,6 @@ import time
 import typing as ty
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from threading import RLock
 from time import perf_counter as clock
 
 from redis.asyncio.client import Redis as AIORedis
@@ -21,7 +20,7 @@ from premier._types import (
     TaskScheduler,
     ThrottleHandler,
 )
-from premier.errors import BucketFullError
+from premier.errors import BucketFullError, QueueFullError
 from premier.task_queue import AsyncRedisQueue, RedisQueue
 
 # from redis.exceptions import ResponseError as RedisExceptionResponse
@@ -144,36 +143,6 @@ class DefaultHandler(ThrottleHandler):
 
 
 class RedisScriptLoader(ty.Generic[RedisClient]):
-    leaky_bucket_incr_lua: ty.ClassVar[
-        str
-    ] = """
-    local waiting_key = KEYS[1] -- The key for tracking waiting tasks
-    local bucket_size = ARGV[1] 
-
-    local waiting_tasks = tonumber(redis.call('GET', waiting_key)) or 0
-
-    if waiting_tasks == 0 then
-        redis.set(waiting_key, 1)
-        return
-
-    if waiting_tasks + 1 > bucket_size then
-        return redis.error_reply("Bucket is full. Cannot add more tasks. queue size: " .. waiting_tasks)
-    end
-
-    redis.call("INCR", waiting_key)
-    """
-
-    leaky_bucket_decr_lua: ty.ClassVar[
-        str
-    ] = """
-    local waiting_key = KEYS[1] -- The key for tracking waiting tasks
-
-    local waiting_tasks = tonumber(redis.call('GET', waiting_key)) or 0
-    if waiting_tasks > 0 then
-        redis.call('DECR', waiting_key)
-    end
-    """
-
     clear_keyspace_lua: ty.ClassVar[
         str
     ] = """
@@ -186,7 +155,7 @@ class RedisScriptLoader(ty.Generic[RedisClient]):
     """  # remove all keys that match the pattern, ignore if empty
 
     def __init__(self, redis: RedisClient, *, script_path: Path | None = None):
-        self._script_path = script_path or Path(__file__).parent / "lua"
+        self._script_path = script_path or (Path(__file__).parent / "lua")
         self._load_script(redis)
 
     def _load_script(self, redis: RedisClient):
@@ -203,8 +172,6 @@ class RedisScriptLoader(ty.Generic[RedisClient]):
             (self._script_path / "leaky_bucket.lua").read_text()
         )
 
-        self.leaky_bucket_incr = redis.register_script(self.leaky_bucket_incr_lua)
-        self.leaky_bucket_decr = redis.register_script(self.leaky_bucket_decr_lua)
         self.clear_keyspace = redis.register_script(self.clear_keyspace_lua)
 
 
@@ -216,7 +183,6 @@ class RedisHandler(ThrottleHandler):
         self._script_loader = script_loader or RedisScriptLoader(redis)
         self._executor = ThreadPoolExecutor()
         self._queue_registry: dict[ty.Hashable, RedisQueue] = {}
-        self.__lock = RLock()
 
     def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
         res = self._script_loader.fixed_window_script(
@@ -261,7 +227,7 @@ class RedisHandler(ThrottleHandler):
         ) -> None:
             try:
                 task_queue.put((args, kwargs))
-            except queue.Full:
+            except QueueFullError:
                 raise BucketFullError("Bucket is full. Cannot add more tasks.")
 
             self._executor.submit(_poll_and_execute, func)
@@ -343,9 +309,8 @@ class AsyncRedisHandler(AsyncThrottleHandler):
 
             try:
                 await task_queue.put((args, kwargs))
-            except queue.Full:
+            except QueueFullError:
                 raise BucketFullError("Bucket is full. Cannot add more tasks.")
-
             await _poll_and_execute(func)
 
         return _schedule_task  # type: ignore

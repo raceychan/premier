@@ -9,6 +9,9 @@ class QuotaExceedsError(ThrottlerError):
         self.time_remains = time_remains
         super().__init__(msg)
 
+class QueueFullError(ThrottlerError):
+    def __init__(self, msg: str=""):
+        self.msg = msg
 
 class BucketFullError(QuotaExceedsError):
     def __init__(self, msg: str):

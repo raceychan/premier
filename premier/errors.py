@@ -1,7 +1,15 @@
-class ThrottlerError(Exception): ...
+class PremierError(Exception): ...
 
 
-class QuotaExceedsError(ThrottlerError):
+class ArgumentMissingError(PremierError):
+    def __init__(self, msg: str = ""):
+        self.msg = msg
+
+
+class UninitializedHandlerError(PremierError): ...
+
+
+class QuotaExceedsError(PremierError):
     time_remains: float
 
     def __init__(self, quota: int, duration_s: int, time_remains: float):
@@ -9,13 +17,12 @@ class QuotaExceedsError(ThrottlerError):
         self.time_remains = time_remains
         super().__init__(msg)
 
-class QueueFullError(ThrottlerError):
-    def __init__(self, msg: str=""):
+
+class QueueFullError(PremierError):
+    def __init__(self, msg: str = ""):
         self.msg = msg
+
 
 class BucketFullError(QuotaExceedsError):
     def __init__(self, msg: str):
         self.msg = msg
-
-
-class UninitializedHandlerError(ThrottlerError): ...

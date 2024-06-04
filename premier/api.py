@@ -1,7 +1,7 @@
-# import asyncio
 import typing as ty
 
 from premier._types import Duration, KeyMaker, R, ThrottleAlgo
+from premier.errors import ArgumentMissingError
 from premier.throttler import throttler
 
 
@@ -50,7 +50,7 @@ def throttled(
     algo = algo or throttler.default_algo
     if algo is ThrottleAlgo.LEAKY_BUCKET:
         if bucket_size is None:
-            raise ValueError("bucket_size must be specified for LEAKY_BUCKET")
+            raise ArgumentMissingError("bucket_size must be specified for LEAKY_BUCKET")
         return throttler.throttle(
             quota=quota,
             duration=duration,

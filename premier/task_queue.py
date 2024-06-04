@@ -2,7 +2,7 @@ import json
 import queue
 import typing as ty
 from asyncio import Lock as AsyncLock
-from threading import Lock
+from threading import Lock as ThreadLock
 
 from redis.asyncio.client import Redis as AIORedis
 from redis.client import Redis  # type: ignore
@@ -21,6 +21,42 @@ def json_dumps(data: ty.Any) -> bytes:
     return res
 
 
+@ty.overload
+def put_script(redis: Redis) -> ty.Callable[[str, int, bytes], bool]:
+    pass
+
+
+@ty.overload
+def put_script(redis: AIORedis) -> ty.Callable[[str, int, bytes], ty.Awaitable[bool]]:
+    pass
+
+
+def put_script(redis: Redis | AIORedis):  # type: ignore
+    put_lua: str = """
+    local queue_key = KEYS[1]
+    local queue_size = tonumber(ARGV[1])
+    local item = ARGV[2]
+    local queue_length = redis.call('LLEN', queue_key)
+    if queue_length >= queue_size then
+        return -1
+    else
+        redis.call('LPUSH', queue_key, item)
+        return 1
+    end
+    """
+    _script = redis.register_script(put_lua)
+
+    def put(queue_key: str, queue_size: int, item: bytes) -> bool:
+        res: int = _script(keys=[queue_key], args=[queue_size, item])  # type: ignore
+        return res == 1
+
+    async def async_put(queue_key: str, queue_size: int, item: bytes) -> bool:
+        res: int = await _script(keys=[queue_key], args=[queue_size, item])  # type: ignore
+        return res == 1
+
+    return put if isinstance(redis, Redis) else async_put
+
+
 class IQueue(TaskQueue[QueueItem]):
     def __init__(self, maxsize: int):
         self._size = maxsize
@@ -34,7 +70,7 @@ class IQueue(TaskQueue[QueueItem]):
         try:
             self._queue.put(item, block=False)
         except queue.Full:
-            raise QueueFullError
+            raise QueueFullError("Bucket is full. Cannot add more items.")
 
     def get(self, block: bool = True, *, timeout: float = 0) -> QueueItem:
         return self._queue.get(block=block, timeout=timeout)
@@ -54,7 +90,12 @@ class RedisQueue(TaskQueue[QueueItem]):
         self._client = client
         self._name = name
         self._size = queue_size
-        self.__lock = Lock()
+        self._put_script = put_script(self._client)
+        self.__lock = ThreadLock()
+
+    @property
+    def capacity(self) -> int:
+        return self._size
 
     def qsize(self) -> int:
         """Return the approximate size of the queue."""
@@ -64,10 +105,6 @@ class RedisQueue(TaskQueue[QueueItem]):
     def empty(self) -> bool:
         """Return True if the queue is empty, False otherwise."""
         return self.qsize() == 0
-
-    @property
-    def capacity(self) -> int:
-        return self._size
 
     def full(self) -> bool:
         return self.qsize() >= self._size
@@ -89,9 +126,9 @@ class RedisQueue(TaskQueue[QueueItem]):
         """Put an item into the queue."""
         item_bytes = json_dumps(item)
         with self.__lock:
-            if self.full():
+            succeed = self._put_script(self._name, self._size, item_bytes)
+            if not succeed:
                 raise QueueFullError("Bucket is full. Cannot add more items.")
-            self._client.lpush(self._name, item_bytes)
 
     def clear(self) -> None:
         """Clear all items from the queue."""
@@ -110,6 +147,7 @@ class AsyncRedisQueue(AsyncTaskQueue[QueueItem]):
         self._client = client
         self._name = name
         self._size = queue_size
+        self._put_script = put_script(self._client)
         self.__lock = AsyncLock()
 
     @property
@@ -141,10 +179,10 @@ class AsyncRedisQueue(AsyncTaskQueue[QueueItem]):
     async def put(self, item: QueueItem) -> None:
         """Put an item into the queue."""
         item_bytes = json_dumps(item)
-        async with self.__lock:
-            if await self.full():
+        async with self.__lock:  # for some reason if we get rid of this lock test will fail
+            succeed = await self._put_script(self._name, self._size, item_bytes)
+            if not succeed:
                 raise QueueFullError("Bucket is full. Cannot add more items.")
-            await self._client.lpush(self._name, item_bytes)  # type: ignore
 
     async def full(self) -> bool:
         return await self.qsize() >= self._size

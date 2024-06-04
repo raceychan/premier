@@ -156,11 +156,10 @@ class RedisScriptLoader(ty.Generic[RedisClient]):
     end
     """  # remove all keys that match the pattern, ignore if empty
 
+    #     self._load_script(redis)
+    # def _load_script(self, redis: RedisClient):
     def __init__(self, redis: RedisClient, *, script_path: Path | None = None):
         self._script_path = script_path or (Path(__file__).parent / "lua")
-        self._load_script(redis)
-
-    def _load_script(self, redis: RedisClient):
         self.fixed_window_script = redis.register_script(
             (self._script_path / "fixed_window.lua").read_text()
         )
@@ -217,7 +216,7 @@ class RedisHandler(ThrottleHandler):
             delay = ty.cast(CountDown, delay)
             return delay
 
-        def _poll_and_execute(func: ty.Callable[..., None]) -> None:
+        def _poll_and_execute(func: ty.Callable[..., R]) -> None:
             while (delay := _calculate_delay(key, quota, duration)) > 0:
                 time.sleep(delay)
             item = task_queue.get(block=False)
@@ -297,7 +296,7 @@ class AsyncRedisHandler(AsyncThrottleHandler):
             delay = ty.cast(CountDown, delay)
             return delay
 
-        async def _poll_and_execute(func: ty.Callable[..., ty.Awaitable[None]]) -> None:
+        async def _poll_and_execute(func: ty.Callable[..., ty.Awaitable[R]]) -> None:
             while (delay := await _calculate_delay(key, quota, duration)) > 0:
                 await asyncio.sleep(delay)
 

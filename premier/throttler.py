@@ -77,7 +77,7 @@ class Throttler:
         quota: int,
         duration: int,
         keymaker: KeyMaker | None = None,
-        bucket_size: int = None,  # type: ignore
+        bucket_size: int = -1,
     ) -> ty.Callable[[SyncFunc[P, R]], SyncFunc[P, R]]: ...
 
     def throttle(
@@ -86,7 +86,7 @@ class Throttler:
         quota: int,
         duration: int,
         keymaker: KeyMaker | None = None,
-        bucket_size: int = None,  # type: ignore
+        bucket_size: int = -1,
     ) -> (
         ty.Callable[[ty.Callable[..., R]], ty.Callable[..., R]]
         | ty.Callable[[ty.Callable[..., None]], ty.Callable[..., None]]

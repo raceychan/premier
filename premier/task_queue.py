@@ -5,7 +5,7 @@ from asyncio import Lock as AsyncLock
 from threading import Lock as ThreadLock
 
 from redis.asyncio.client import Redis as AIORedis
-from redis.client import Redis  # type: ignore
+from redis.client import Redis
 
 from premier._types import AsyncTaskQueue, QueueItem, TaskQueue
 from premier.errors import QueueFullError

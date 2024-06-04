@@ -30,8 +30,8 @@ TaskArgs = tuple[tuple[ty.Any, ...], dict[ty.Any, ty.Any]]
 
 
 class DefaultHandler(ThrottleHandler):
-    def __init__(self, counter: dict[ty.Hashable, ty.Any] | None = None):
-        self._counter = counter or dict[ty.Hashable, ty.Any]()
+    def __init__(self, counter: dict[str, ty.Any] | None = None):
+        self._counter = counter or dict[str, ty.Any]()
         self._queue_registry: dict[ty.Hashable, TaskQueue[TaskArgs]] = dict()
         self._executors = ThreadPoolExecutor()
 
@@ -96,7 +96,7 @@ class DefaultHandler(ThrottleHandler):
                 maxsize=bucket_size
             )
 
-        def _calculate_delay(key: ty.Hashable, quota: int, duration: int) -> CountDown:
+        def _calculate_delay(key: str, quota: int, duration: int) -> CountDown:
             now = clock()
             last_execution_time = self._counter.get(key, None)
             if not last_execution_time:
@@ -110,11 +110,11 @@ class DefaultHandler(ThrottleHandler):
                 return -1
             return delay
 
-        def _poll_and_execute(func: ty.Callable[..., None]) -> None:
+        def _poll_and_execute(func: ty.Callable[..., R]) -> None:
             while (delay := _calculate_delay(key, quota, duration)) > 0:
                 time.sleep(delay)
             item = task_queue.get(block=False)
-            args, kwargs = item or ((), {})  # type: ignore
+            args, kwargs = item or ((), {})
             _ = func(*args, **kwargs)
 
         def _schedule_task(
@@ -125,7 +125,7 @@ class DefaultHandler(ThrottleHandler):
             except QueueFullError:
                 raise BucketFullError("Bucket is full. Cannot add more tasks.")
 
-            self._executors.submit(_poll_and_execute, func)  # type: ignore
+            self._executors.submit(_poll_and_execute, func)
 
         return _schedule_task
 
@@ -133,7 +133,7 @@ class DefaultHandler(ThrottleHandler):
         if not keyspace:
             self._counter.clear()
 
-        keys = [key for key in self._counter if key.startswith(keyspace)]  # type: ignore
+        keys = [key for key in self._counter if key.startswith(keyspace)]
         for k in keys:
             self._counter.pop(k, None)
 
@@ -314,7 +314,7 @@ class AsyncRedisHandler(AsyncThrottleHandler):
                 raise BucketFullError("Bucket is full. Cannot add more tasks.")
             await _poll_and_execute(func)
 
-        return _schedule_task  # type: ignore
+        return _schedule_task 
 
     async def close(self) -> None:
         await self._redis.aclose()

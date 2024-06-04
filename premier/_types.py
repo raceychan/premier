@@ -9,10 +9,8 @@ P = ty.ParamSpec("P")
 R = ty.TypeVar("R", covariant=True)
 QueueItem = ty.TypeVar("QueueItem")
 
-
 KeyMaker = ty.Callable[..., str]
 CountDown = ty.Literal[-1] | float
-
 
 TaskScheduler = ty.Callable[..., None]
 AsyncTaskScheduler = ty.Callable[..., ty.Awaitable[None]]

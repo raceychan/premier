@@ -1,12 +1,13 @@
-import abc
 import json
+import queue
 import typing as ty
 from asyncio import Lock as AsyncLock
-from threading import RLock
+from threading import Lock
 
 from redis.asyncio.client import Redis as AIORedis
 from redis.client import Redis  # type: ignore
 
+from premier._types import AsyncTaskQueue, QueueItem, TaskQueue
 from premier.errors import QueueFullError
 
 
@@ -20,34 +21,40 @@ def json_dumps(data: ty.Any) -> bytes:
     return res
 
 
-class TaskQueue(ty.Protocol):
-    def put(self, item: ty.Any) -> None: ...
-    def get(self, block: bool = True, *, timeout: float = 0) -> ty.Any: ...
-    def qsize(self) -> int: ...
-    def empty(self) -> bool: ...
-    def full(self) -> bool: ...
+class IQueue(TaskQueue[QueueItem]):
+    def __init__(self, maxsize: int):
+        self._size = maxsize
+        self._queue = queue.Queue[QueueItem](maxsize=maxsize)
+
     @property
-    @abc.abstractmethod
-    def capacity(self) -> int: ...
+    def capacity(self) -> int:
+        return self._size
+
+    def put(self, item: QueueItem) -> None:
+        try:
+            self._queue.put(item, block=False)
+        except queue.Full:
+            raise QueueFullError
+
+    def get(self, block: bool = True, *, timeout: float = 0) -> QueueItem:
+        return self._queue.get(block=block, timeout=timeout)
+
+    def qsize(self) -> int:
+        return self._queue.qsize()
+
+    def empty(self) -> bool:
+        return self._queue.empty()
+
+    def full(self) -> bool:
+        return self._queue.full()
 
 
-class AsyncTaskQueue(ty.Protocol):
-    async def put(self, item: ty.Any) -> None: ...
-    async def get(self, block: bool = True, *, timeout: float = 0) -> ty.Any: ...
-    async def qsize(self) -> int: ...
-    async def empty(self) -> bool: ...
-    async def full(self) -> bool: ...
-    @property
-    @abc.abstractmethod
-    def capacity(self) -> int: ...
-
-
-class RedisQueue(TaskQueue):
+class RedisQueue(TaskQueue[QueueItem]):
     def __init__(self, client: Redis, *, name: str, queue_size: int):
         self._client = client
         self._name = name
         self._size = queue_size
-        self.__lock = RLock()
+        self.__lock = Lock()
 
     def qsize(self) -> int:
         """Return the approximate size of the queue."""
@@ -65,7 +72,7 @@ class RedisQueue(TaskQueue):
     def full(self) -> bool:
         return self.qsize() >= self._size
 
-    def get(self, block: bool = True, *, timeout: float = 0) -> ty.Any:
+    def get(self, block: bool = True, *, timeout: float = 0) -> QueueItem:
         """Remove and return an item from the queue.
         If optional args block is true and timeout is None (the default), block
         if necessary until an item is available.
@@ -78,7 +85,7 @@ class RedisQueue(TaskQueue):
 
         return json_loads(item) if item else None  # type: ignore
 
-    def put(self, item: ty.Any) -> None:
+    def put(self, item: QueueItem) -> None:
         """Put an item into the queue."""
         item_bytes = json_dumps(item)
         with self.__lock:
@@ -98,7 +105,7 @@ class RedisQueue(TaskQueue):
         self.close()
 
 
-class AsyncRedisQueue(AsyncTaskQueue):
+class AsyncRedisQueue(AsyncTaskQueue[QueueItem]):
     def __init__(self, client: AIORedis, *, name: str, queue_size: int):
         self._client = client
         self._name = name
@@ -118,7 +125,7 @@ class AsyncRedisQueue(AsyncTaskQueue):
         """Return True if the queue is empty, False otherwise."""
         return await self.qsize() == 0
 
-    async def get(self, block: bool = True, *, timeout: float = 0) -> ty.Any:
+    async def get(self, block: bool = True, *, timeout: float = 0) -> QueueItem:
         """Remove and return an item from the queue.
         If optional args block is true and timeout is None (the default), block
         if necessary until an item is available.
@@ -131,7 +138,7 @@ class AsyncRedisQueue(AsyncTaskQueue):
 
         return json_loads(item) if item else None  # type: ignore
 
-    async def put(self, item: ty.Any) -> None:
+    async def put(self, item: QueueItem) -> None:
         """Put an item into the queue."""
         item_bytes = json_dumps(item)
         async with self.__lock:

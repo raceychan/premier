@@ -1,5 +1,4 @@
 import asyncio
-import queue
 import time
 import typing as ty
 from concurrent.futures import ThreadPoolExecutor
@@ -21,18 +20,19 @@ from premier._types import (
     ThrottleHandler,
 )
 from premier.errors import BucketFullError, QueueFullError
-from premier.task_queue import AsyncRedisQueue, RedisQueue
+from premier.task_queue import AsyncRedisQueue, IQueue, RedisQueue
 
 # from redis.exceptions import ResponseError as RedisExceptionResponse
 
 
 RedisClient = ty.TypeVar("RedisClient", Redis, AIORedis)
+TaskArgs = tuple[tuple[ty.Any, ...], dict[ty.Any, ty.Any]]
 
 
 class DefaultHandler(ThrottleHandler):
     def __init__(self, counter: dict[ty.Hashable, ty.Any] | None = None):
         self._counter = counter or dict[ty.Hashable, ty.Any]()
-        self._queue_registry: dict[ty.Hashable, TaskQueue[ty.Any]] = dict()
+        self._queue_registry: dict[ty.Hashable, TaskQueue[TaskArgs]] = dict()
         self._executors = ThreadPoolExecutor()
 
     def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
@@ -92,7 +92,9 @@ class DefaultHandler(ThrottleHandler):
     ) -> TaskScheduler:
         task_queue = self._queue_registry.get(key, None)
         if not task_queue:
-            task_queue = self._queue_registry[key] = queue.Queue(maxsize=bucket_size)
+            task_queue = self._queue_registry[key] = IQueue[TaskArgs](
+                maxsize=bucket_size
+            )
 
         def _calculate_delay(key: ty.Hashable, quota: int, duration: int) -> CountDown:
             now = clock()
@@ -119,8 +121,8 @@ class DefaultHandler(ThrottleHandler):
             func: ty.Callable[P, R], *args: P.args, **kwargs: P.kwargs
         ) -> None:
             try:
-                task_queue.put((args, kwargs), block=False)
-            except queue.Full:
+                task_queue.put((args, kwargs))
+            except QueueFullError:
                 raise BucketFullError("Bucket is full. Cannot add more tasks.")
 
             self._executors.submit(_poll_and_execute, func)  # type: ignore
@@ -182,7 +184,7 @@ class RedisHandler(ThrottleHandler):
         self._redis = redis
         self._script_loader = script_loader or RedisScriptLoader(redis)
         self._executor = ThreadPoolExecutor()
-        self._queue_registry: dict[ty.Hashable, RedisQueue] = {}
+        self._queue_registry: dict[ty.Hashable, RedisQueue[TaskArgs]] = {}
 
     def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
         res = self._script_loader.fixed_window_script(
@@ -206,7 +208,7 @@ class RedisHandler(ThrottleHandler):
     ) -> TaskScheduler:
         task_queue = self._queue_registry.get(key, None)
         if task_queue is None:
-            task_queue = self._queue_registry[key] = RedisQueue(
+            task_queue = self._queue_registry[key] = RedisQueue[TaskArgs](
                 self._redis, name=key, queue_size=bucket_size
             )
 
@@ -255,7 +257,7 @@ class AsyncRedisHandler(AsyncThrottleHandler):
     ):
         self._redis = redis
         self._script_loader = script_loader or RedisScriptLoader(redis)
-        self._queue_registry: dict[ty.Hashable, AsyncRedisQueue] = {}
+        self._queue_registry: dict[ty.Hashable, AsyncRedisQueue[TaskArgs]] = {}
 
     async def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
         res = await self._script_loader.fixed_window_script(  # type: ignore
@@ -283,12 +285,12 @@ class AsyncRedisHandler(AsyncThrottleHandler):
     ) -> AsyncTaskScheduler:
         task_queue = self._queue_registry.get(key, None)
         if not task_queue:
-            task_queue = self._queue_registry[key] = AsyncRedisQueue(
+            task_queue = self._queue_registry[key] = AsyncRedisQueue[TaskArgs](
                 self._redis, name=key, queue_size=bucket_size
             )
 
         async def _calculate_delay(key: str, quota: int, duration: int) -> CountDown:
-            delay = await self._script_loader.leaky_bucket(
+            delay = await self._script_loader.leaky_bucket(  # type: ignore
                 keys=(key), args=(quota, duration)
             )
 

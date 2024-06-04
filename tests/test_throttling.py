@@ -124,7 +124,7 @@ def test_throttler_with_leaky_bucket(throttler: Throttler, logger: logging.Logge
 
     for _ in range(tries):
         try:
-            f = add(3, 5)
+            add(3, 5)
         except BucketFullError:
             rejected += 1
         else:

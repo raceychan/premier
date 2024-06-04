@@ -36,13 +36,12 @@ def put_script(redis: Redis | AIORedis):  # type: ignore
     local queue_key = KEYS[1]
     local queue_size = tonumber(ARGV[1])
     local item = ARGV[2]
-    local queue_length = redis.call('LLEN', queue_key)
-    if queue_length >= queue_size then
+
+    if redis.call('LLEN', queue_key) >= queue_size then
         return -1
-    else
-        redis.call('LPUSH', queue_key, item)
-        return 1
     end
+    redis.call('LPUSH', queue_key, item)
+    return 1
     """
     _script = redis.register_script(put_lua)
 

@@ -1,5 +1,68 @@
 # CHANGELOG
 
+
+
+## v0.4.0 (2024-06-05)
+
+### Chore
+
+* chore: fix test ([`17ce3e4`](https://github.com/raceychan/pythrottler/commit/17ce3e49e7efbe6f9b2e3faf864692b791cfe0df))
+
+* chore: dev ([`22be11c`](https://github.com/raceychan/pythrottler/commit/22be11c00787ef1f7333202cc9bd2475c1a9bed6))
+
+* chore: readme ([`7d5a5bc`](https://github.com/raceychan/pythrottler/commit/7d5a5bccde4c0b37e9a94693ca5885af3aa0246f))
+
+* chore: readme ([`f376b5b`](https://github.com/raceychan/pythrottler/commit/f376b5bf9ca29ff81b3934662fe92d89560b4094))
+
+* chore: readme ([`bdcb13f`](https://github.com/raceychan/pythrottler/commit/bdcb13fb5cce7b72660a0a6e89eabea684b54fc1))
+
+* chore: readme ([`9d14e9e`](https://github.com/raceychan/pythrottler/commit/9d14e9e32b38f41722d7fa4b07fe89358d977b64))
+
+### Feature
+
+* feat: better error message ([`b1c2523`](https://github.com/raceychan/pythrottler/commit/b1c25239c837aa4a08915011ee89add4f64bb8e2))
+
+* feat: async queue ([`d621219`](https://github.com/raceychan/pythrottler/commit/d6212191abedd331d255aea80592af644bde1fe8))
+
+* feat: aio ([`67d85c2`](https://github.com/raceychan/pythrottler/commit/67d85c2b10858dc700c6f5f42d0fc3dd34518ba9))
+
+* feat: aio ([`710e934`](https://github.com/raceychan/pythrottler/commit/710e934057361ec95e513a5ef8d2d96e590b491a))
+
+### Fix
+
+* fix: make TaskQueue.put atomic using redis lua script ([`69a49aa`](https://github.com/raceychan/pythrottler/commit/69a49aa502a4946f60179c1036717365bfc7e402))
+
+* fix: fixed asyncio throttler using asyncio.Lock ([`4811312`](https://github.com/raceychan/pythrottler/commit/481131212897f998b09173cd6b4f63f6f02c5ce8))
+
+* fix: fix typing ([`29f4a76`](https://github.com/raceychan/pythrottler/commit/29f4a76c07c10a0ede157f5566f15f2a0f64c643))
+
+### Refactor
+
+* refactor: rewrite leaky bucket ([`5e38981`](https://github.com/raceychan/pythrottler/commit/5e389812832af6ef054858bd8c1a449f8b821092))
+
+### Unknown
+
+* chores: fix conflicts ([`07198a8`](https://github.com/raceychan/pythrottler/commit/07198a8739845c081f5bd84fc9e002310ae89ea3))
+
+* Merge branch &#39;dev&#39;
+adding async throttler for async function, also fixes a few bug in
+threading case ([`630c8ed`](https://github.com/raceychan/pythrottler/commit/630c8ed6282a310c50fc26f57b42db2ff126bfb8))
+
+* chores: last commit before merge ([`17110a9`](https://github.com/raceychan/pythrottler/commit/17110a92f57388369c3a2a6344051bde6aa99896))
+
+* chores: fix type errors ([`0a69501`](https://github.com/raceychan/pythrottler/commit/0a6950191b67da0fa1a9c36a34e610cb2d0b4335))
+
+* chores: refactor put script ([`fbca52e`](https://github.com/raceychan/pythrottler/commit/fbca52e190d02f369d74a64b8c6a6dc5132cb4e3))
+
+* chores: fix typing ([`fccb598`](https://github.com/raceychan/pythrottler/commit/fccb598fb416d86119eed63d6508f8e971a6e161))
+
+* wip: working on asyncio throttler ([`f933f10`](https://github.com/raceychan/pythrottler/commit/f933f10eb620a79b9801bd7cc7fb44657d759001))
+
+* chores: remove setup.py ([`82b9ad6`](https://github.com/raceychan/pythrottler/commit/82b9ad612062a0d9755d61ddca4b34fbe23a8358))
+
+* chores: test ([`6ff20d2`](https://github.com/raceychan/pythrottler/commit/6ff20d243a2f605fc250cf6926d90dd4d819393f))
+
+
 ## v0.3.0 (2024-04-08)
 
 ### Chore

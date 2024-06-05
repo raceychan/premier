@@ -1,7 +1,7 @@
 import typing as ty
 
-from premier._types import Duration, KeyMaker
-from premier.throttle_algo import ThrottleAlgo
+from premier._types import Duration, KeyMaker, R, ThrottleAlgo
+from premier.errors import ArgumentMissingError
 from premier.throttler import throttler
 
 
@@ -17,11 +17,10 @@ def throttled(
         | None
     ) = None,
     keymaker: KeyMaker | None = None,
-    bucket_size: None = None,
-): ...
+) -> ty.Callable[[ty.Callable[..., R]], ty.Callable[..., R]]:
+    pass
 
 
-# Overload specifically for the LEAKY_BUCKET algorithm, requiring bucket_size
 @ty.overload
 def throttled(
     quota: int,
@@ -30,7 +29,7 @@ def throttled(
     algo: ty.Literal[ThrottleAlgo.LEAKY_BUCKET],
     keymaker: KeyMaker | None = None,
     bucket_size: int,
-): ...
+) -> ty.Callable[[ty.Callable[..., None]], ty.Callable[..., None]]: ...
 
 
 def throttled(
@@ -40,6 +39,9 @@ def throttled(
     algo: ThrottleAlgo | None = None,
     keymaker: KeyMaker | None = None,
     bucket_size: int | None = None,
+) -> (
+    ty.Callable[[ty.Callable[..., None]], ty.Callable[..., None]]
+    | ty.Callable[[ty.Callable[..., R]], ty.Callable[..., R]]
 ):
     "Register the function to be throttled"
     duration = (
@@ -47,14 +49,15 @@ def throttled(
     )
     algo = algo or throttler.default_algo
     if algo is ThrottleAlgo.LEAKY_BUCKET:
-        assert bucket_size
-        return throttler.leaky_bucket(
+        if bucket_size is None:
+            raise ArgumentMissingError("bucket_size must be specified for LEAKY_BUCKET")
+        return throttler.throttle(
             quota=quota,
-            duration_s=duration,
+            duration=duration,
+            throttle_algo=algo,
             keymaker=keymaker,
             bucket_size=bucket_size,
         )
-
     return throttler.throttle(
         quota=quota,
         duration=duration,
@@ -93,9 +96,10 @@ def token_bucket(quota: int, duration_s: int, keymaker: KeyMaker | None = None):
 def leaky_bucket(
     bucket_size: int, quota: int, duration_s: int, keymaker: KeyMaker | None = None
 ):
-    return throttler.leaky_bucket(
+    return throttler.throttle(
         bucket_size=bucket_size,
         quota=quota,
-        duration_s=duration_s,
+        throttle_algo=ThrottleAlgo.LEAKY_BUCKET,
+        duration=duration_s,
         keymaker=keymaker,
     )

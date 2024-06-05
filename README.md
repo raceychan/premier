@@ -74,10 +74,10 @@ You might provide your own keymaker to the 'throttler' function like this
 ```python
 from premier import throttler
 
-  @throttler.fixed_window(quota=3, duration_s=5, keymaker=lambda a, b: f"{a}")
-  def add(a: int, b: int) -> int:
-      res = a + b
-      return res
+@throttler.fixed_window(quota=3, duration_s=5, keymaker=lambda a, b: f"{a}")
+def add(a: int, b: int) -> int:
+    res = a + b
+    return res
 ```
 
 ## Supported Backend

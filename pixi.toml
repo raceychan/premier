@@ -16,7 +16,7 @@ setuptools = ">=69.2.0,<69.3"
 redis = ">=5.0.3"
 
 [environments]
-test = ["test"] # This is read as ["default", "test"]
+test = ["test"]
 
 [feature.test.dependencies]
 pytest = ">=7.3"

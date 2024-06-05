@@ -14,14 +14,14 @@ redis = "^5.0.3"
 [tool.poetry.group.test.dependencies]
 pytest = "^8.1.1"
 
+[tool.poetry.group.dev.dependencies]
+python-semantic-release = "^9.4.0"
+
 [tool.pyright]
 include = ["src/*.py"]
 typeCheckingMode = "strict"
 exclude = ["tests"]
 
-
-[tool.poetry.group.dev.dependencies]
-python-semantic-release = "^9.4.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -31,7 +31,6 @@ build-backend = "poetry.core.masonry.api"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-# addopts = "--strict-markers --maxfail=1 --pdbcls=IPython.terminal.debugger:Pdb"
 addopts = "--strict-markers --maxfail=1"
 markers = [
     "integration_test: marks tests as slow integration tests (deselect with '-m \"not integration_test\"')",

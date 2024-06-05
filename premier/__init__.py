@@ -1,14 +1,36 @@
-# from .api import fixed_window, leaky_bucket, limits, sliding_window, token_bucket
+import sys
+
+from ._types import ThrottleAlgo as ThrottleAlgo
 from .api import fixed_window as fixed_window
 from .api import leaky_bucket as leaky_bucket
 from .api import sliding_window as sliding_window
 from .api import throttled as throttled
 from .api import token_bucket as token_bucket
-from .quota_counter import MemoryCounter as MemoryCounter
-from .quota_counter import RedisCounter as RedisCounter
-from .throttle_algo import BucketFullError as BucketFullError  # algo_registry,
-from .throttle_algo import QuotaExceedsError as QuotaExceedsError
-from .throttle_algo import ThrottleAlgo as ThrottleAlgo
-
-# from .throttle_algo import func_keymaker as func_keymaker
+from .errors import QuotaExceedsError as QuotaExceedsError
+from .handler import AsyncRedisHandler as AsyncRedisHandler
+from .handler import BucketFullError as BucketFullError
+from .handler import DefaultHandler as DefaultHandler
+from .handler import RedisHandler as RedisHandler
+from .throttler import Throttler as Throttler
 from .throttler import throttler as throttler
+
+if sys.version_info >= (3, 8):
+    from importlib import metadata
+else:
+    import importlib_metadata as metadata
+
+
+def int_or_str(value: str):
+    try:
+        return int(value)
+    except ValueError:
+        return value
+
+
+try:
+    __version__ = metadata.version("redis")
+except metadata.PackageNotFoundError:
+    __version__ = "99.99.99"
+
+
+VERSION = tuple(int_or_str(x) for x in __version__.split("."))

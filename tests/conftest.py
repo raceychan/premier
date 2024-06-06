@@ -1,5 +1,7 @@
 import asyncio
+import json
 import logging
+from pathlib import Path
 
 import pytest
 from redis import Redis
@@ -8,7 +10,18 @@ from redis.asyncio.client import Redis as AIORedis
 from premier import AsyncRedisHandler, DefaultHandler, RedisHandler
 from premier import throttler as _throttler
 
-REDIS_URL = "redis://@192.168.50.22:7379/0"
+
+def read_envs(file: Path) -> dict[str, str]:
+    envs = {
+        key: value
+        for line in file.read_text().split("\n")
+        if line and not line.startswith("#")
+        for key, value in [line.split("=", 1)]
+    }
+    return envs
+
+
+envs = read_envs(Path("./.env"))
 
 
 @pytest.fixture(scope="session")
@@ -40,7 +53,7 @@ def logger():
 
 @pytest.fixture(scope="session")
 def redis_handler():
-    redis = Redis.from_url(REDIS_URL)  # type: ignore
+    redis = Redis.from_url(envs["REDIS_URL"])  # type: ignore
     handler = RedisHandler(redis=redis)
     yield handler
     handler.close()
@@ -57,7 +70,7 @@ def throttler(redis_handler: RedisHandler):
 
 @pytest.fixture(scope="function")
 async def aredishandler():
-    aredis = AIORedis.from_url(REDIS_URL)
+    aredis = AIORedis.from_url(envs["REDIS_URL"])
     handler = AsyncRedisHandler(aredis)
 
     yield handler

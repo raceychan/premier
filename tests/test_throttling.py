@@ -5,9 +5,6 @@ import pytest
 
 from premier import BucketFullError, QuotaExceedsError, Throttler
 
-# pytest.skip(allow_module_level=True)
-
-
 def _keymaker(a: int, b: int) -> str:
     return f"{a}"
 

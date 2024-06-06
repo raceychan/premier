@@ -26,7 +26,7 @@ premier is an intuitive throttler that supports various backends and throttling 
 1. decorate functions to be throttled
 
 ```python
-from premier import limits, throttler, ThrottleAlgo
+from premier import limits, throttler, ThrottleAlgo, RedisHandler
 
 @throttler.fixed_window(quota=3, duration_s=5, algo=ThrottleAlgo.FIXED_WINDOW)
 def add(a: int, b: int) -> int:
@@ -37,10 +37,17 @@ def add(a: int, b: int) -> int:
 2. config throttler when app starts
 
 ```python
-redis = Redis.from_url("redis://@127.0.0.1:6379/0")
+from redis import Redis
+from redis.asyncio.client import Redis as AIORedis
+
+REDIS_URL="redis://@127.0.0.1:6379/0"
+redis = Redis.from_url(REDIS_URL)
+aredis = AIORedis.from_url(REDIS_URL)
+
 throttler.config(
-    quota_counter=RedisCounter(redis=redis, ex_s=15), # set key expirey to 15 seconds
-    algo=ThrottleAlgo.FIXED_WINDOW,# use fix window as the default throttling algorithm
+    handler = RedisHandler(redis=redis),
+    aiohandler = AsyncRedisHandler(aredis), # only if you need to throttle async functions
+    algo=ThrottleAlgo.FIXED_WINDOW, # use fix window as the default throttling algorithm
     keyspace="premier", # set premier as the keyspace
 )
 

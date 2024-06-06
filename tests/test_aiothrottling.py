@@ -5,8 +5,6 @@ import pytest as pytest
 
 from premier import BucketFullError, Throttler
 
-# pytest.skip(allow_module_level=True)
-
 
 async def test_async_throttler_with_leaky_bucket(
     aiothrottler: Throttler, logger: logging.Logger

@@ -26,20 +26,20 @@ premier is an intuitive throttler that supports various backends and throttling 
 1. decorate functions to be throttled
 
 ```python
-import asyncio
+import httpx
 from premier import limits, throttler, ThrottleAlgo, RedisHandler
 
-fixed_window = throttler.fixed_window(quota=3, duration_s=5, algo=ThrottleAlgo.FIXED_WINDOW)
+fixed_window = throttler.fixed_window(quota=3, duration=5, algo=ThrottleAlgo.FIXED_WINDOW)
 
 @fixed_window
-def add(a: int, b: int) -> int:
-    res = a + b
-    return res
+def request(url: str) -> str:
+    r = httpx.get(url)
+    return r.text
 
 @fixed_window
-async def add(a: int, b: int) -> int:
-  await asyncio.sleep(1)
-  return a + b
+async def async_request(client: httpx.AsyncClient, url: str) -> str:
+  r = await client.get('https://www.example.com/')
+  return r.text
 ```
 
 2. config throttler when app starts
@@ -48,7 +48,7 @@ async def add(a: int, b: int) -> int:
 from redis import Redis
 from redis.asyncio.client import Redis as AIORedis
 
-REDIS_URL="redis://@127.0.0.1:6379/0"
+REDIS_URL = "redis://@127.0.0.1:6379/0"
 redis = Redis.from_url(REDIS_URL)
 aredis = AIORedis.from_url(REDIS_URL) # only if you need to throttle async functions
 
@@ -89,7 +89,7 @@ You might provide your own keymaker to the 'throttler' function like this
 ```python
 from premier import throttler
 
-@throttler.fixed_window(quota=3, duration_s=5, keymaker=lambda a, b: f"{a}")
+@throttler.fixed_window(quota=3, duration=5, keymaker=lambda a, b: f"{a}")
 def add(a: int, b: int) -> int:
     res = a + b
     return res

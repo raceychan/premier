@@ -58,7 +58,6 @@ throttler.config(
     algo=ThrottleAlgo.FIXED_WINDOW, # use fix window as the default throttling algorithm
     keyspace="premier", # set premier as the keyspace
 )
-
 ```
 
 ## Install
@@ -105,7 +104,7 @@ def add(a: int, b: int) -> int:
 ## Supported Algorithms
 
 | algorithm | status |
-| - | -|
+| - | - |
 | fixed window | supported |
 | sliding window | supported |
 | leaky bucket | supported |
@@ -121,7 +120,6 @@ def add(a: int, b: int) -> int:
 TODO:
 
 - [ ] support lowering version python by using type-extensions
-
 - [ ] implement timeout feature
 - [ ] implement retry feature
 - [ ] implement cache feature

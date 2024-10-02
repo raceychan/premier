@@ -156,8 +156,6 @@ class RedisScriptLoader(ty.Generic[RedisClient]):
     end
     """  # remove all keys that match the pattern, ignore if empty
 
-    #     self._load_script(redis)
-    # def _load_script(self, redis: RedisClient):
     def __init__(self, redis: RedisClient, *, script_path: Path | None = None):
         self._script_path = script_path or (Path(__file__).parent / "lua")
         self.fixed_window_script = redis.register_script(
@@ -314,7 +312,7 @@ class AsyncRedisHandler(AsyncThrottleHandler):
                 raise BucketFullError("Bucket is full. Cannot add more tasks.")
             await _poll_and_execute(func)
 
-        return _schedule_task 
+        return _schedule_task
 
     async def close(self) -> None:
         await self._redis.aclose()

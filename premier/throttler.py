@@ -196,5 +196,18 @@ class Throttler:
             throttle_algo=ThrottleAlgo.LEAKY_BUCKET,
         )
 
+    async def get_countdown(
+        self, throttle_algo, quota: int, duration: int, key: str | None = None
+    ):
+        key = key or f"{self._keyspace}:"
+        if not self._aiohandler:
+            raise UninitializedHandlerError("Async handler not configured")
+        countdown = await self._aiohandler.dispatch(throttle_algo)(
+            key, quota=quota, duration=duration
+        )
+        if countdown == -1: # func is ready to be executed
+            return
+        raise QuotaExceedsError(quota, duration, countdown)
+
 
 throttler = Throttler().config(DefaultHandler())

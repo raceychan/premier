@@ -23,27 +23,49 @@ premier is an intuitive throttler that supports various backends and throttling 
 
 ## Usage
 
-1. decorate functions to be throttled
+- decorate functions to be throttled
 
 ```python
-from premier import limits, throttler, ThrottleAlgo
+import httpx
+from premier import limits, throttler, ThrottleAlgo, RedisHandler
 
-@throttler.fixed_window(quota=quota, duration_s=5, algo=ThrottleAlgo.FIXED_WINDOW)
-def add(a: int, b: int) -> int:
-    res = a + b
-    return res
+fixed_window = throttler.fixed_window(quota=3, duration=5)
+
+@fixed_window
+def request(url: str) -> str:
+    r = httpx.get(url)
+    return r.text
+
+@fixed_window
+async def async_request(client: httpx.AsyncClient, url: str) -> str:
+  r = await client.get('https://www.example.com/')
+  return r.text
 ```
 
-2. config throttler when app starts
+- config throttler as your app starts
 
 ```python
-redis = Redis.from_url("redis://@127.0.0.1:6379/0")
+from redis import Redis
+from redis.asyncio.client import Redis as AIORedis
+
+REDIS_URL = "redis://@127.0.0.1:6379/0"
+redis = Redis.from_url(REDIS_URL)
+aredis = AIORedis.from_url(REDIS_URL) # only if you need to throttle async functions
+
 throttler.config(
-    quota_counter=RedisCounter(redis=redis, ex_s=15), # set key expirey to 15 seconds
-    algo=ThrottleAlgo.FIXED_WINDOW,# use fix window as the default throttling algorithm
+    handler = RedisHandler(redis=redis),
+    aiohandler = AsyncRedisHandler(aredis), # only if you need to throttle async functions
+    algo=ThrottleAlgo.FIXED_WINDOW, # use fix window as the default throttling algorithm
     keyspace="premier", # set premier as the keyspace
 )
+```
 
+- use in fastapi
+
+```python
+@app.get("/", dependencies=[Depends(throttler.get_countdown)])
+async def index():
+    return {"msg": "Hello World"}
 ```
 
 ## Install
@@ -74,7 +96,7 @@ You might provide your own keymaker to the 'throttler' function like this
 ```python
 from premier import throttler
 
-@throttler.fixed_window(quota=3, duration_s=5, keymaker=lambda a, b: f"{a}")
+@throttler.fixed_window(quota=3, duration=5, keymaker=lambda a, b: f"{a}")
 def add(a: int, b: int) -> int:
     res = a + b
     return res
@@ -90,7 +112,7 @@ def add(a: int, b: int) -> int:
 ## Supported Algorithms
 
 | algorithm | status |
-| - | -|
+| - | - |
 | fixed window | supported |
 | sliding window | supported |
 | leaky bucket | supported |
@@ -106,7 +128,6 @@ def add(a: int, b: int) -> int:
 TODO:
 
 - [ ] support lowering version python by using type-extensions
-
 - [ ] implement timeout feature
 - [ ] implement retry feature
 - [ ] implement cache feature

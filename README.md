@@ -29,14 +29,12 @@ premier is an intuitive throttler that supports various backends and throttling 
 import httpx
 from premier import limits, throttler, ThrottleAlgo, RedisHandler
 
-
-
 @throttler.fixed_window(quota=3, duration=5)
 def request(url: str) -> str:
     r = httpx.get(url)
     return r.text
 
-@@throttler.token_bucket(quota=3, duration=5)
+@throttler.token_bucket(quota=3, duration=5)
 async def async_request(client: httpx.AsyncClient, url: str) -> str:
   r = await client.get('https://www.example.com/')
   return r.text

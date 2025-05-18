@@ -5,8 +5,6 @@ import pytest
 
 from premier import BucketFullError, QuotaExceedsError, Throttler
 
-# pytest.skip(allow_module_level=True)
-
 
 def _keymaker(a: int, b: int) -> str:
     return f"{a}"
@@ -84,23 +82,23 @@ def test_throttler_with_keymaker(throttler: Throttler):
     assert len(res) == tries
 
 
-# def test_throttler_with_token_bucket(throttler: Throttler):
+def test_throttler_with_token_bucket(throttler: Throttler):
 
-#     @throttler.token_bucket(quota=3, duration=5, keymaker=_keymaker)
-#     def add(a: int, b: int) -> int:
-#         res = a + b
-#         return res
+    @throttler.token_bucket(quota=3, duration=5, keymaker=_keymaker)
+    def add(a: int, b: int) -> int:
+        res = a + b
+        return res
 
-#     tries = 4
-#     res: list[int] = []
-#     try:
-#         for _ in range(tries):
-#             res.append(add(3, 5))
-#     except QuotaExceedsError:
-#         time.sleep(5 / 3)
-#         res.append(add(3, 5))
+    tries = 4
+    res: list[int] = []
+    try:
+        for _ in range(tries):
+            res.append(add(3, 5))
+    except QuotaExceedsError:
+        time.sleep(5 / 3)
+        res.append(add(3, 5))
 
-#     assert len(res) == tries
+    assert len(res) == tries
 
 
 # BUG: this would leave "p" and "t" to redis and won't be removed

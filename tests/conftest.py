@@ -2,10 +2,8 @@ import asyncio
 import logging
 
 import pytest
-from redis import Redis
-from redis.asyncio.client import Redis as AIORedis
 
-from premier import AsyncRedisHandler, DefaultHandler, RedisHandler
+from premier import  AsyncDefaultHandler
 from premier import throttler as _throttler
 
 REDIS_URL = "redis://@192.168.50.22:7379/0"
@@ -38,35 +36,22 @@ def logger():
     return _logger
 
 
-@pytest.fixture(scope="session")
-def redis_handler():
-    redis = Redis.from_url(REDIS_URL)  # type: ignore
-    handler = RedisHandler(redis=redis)
-    yield handler
-    handler.close()
-
-
 @pytest.fixture(scope="function")
-def throttler(redis_handler: RedisHandler):
-    _throttler.config(handler=redis_handler, keyspace="test")
+def throttler():
+    _throttler.config(keyspace="test")
     yield _throttler
-    # _throttler.clear()
-
-    # NOTE: _throttler.clear would cause bug to leaky_bucket, somehow during a test function it would be called in the middle of the function, might because of the fact that it utlizes multi-threading
 
 
-@pytest.fixture(scope="function")
-async def aredishandler():
-    aredis = AIORedis.from_url(REDIS_URL)
-    handler = AsyncRedisHandler(aredis)
 
+@pytest.fixture
+async def async_handler():
+    handler = AsyncDefaultHandler()
     yield handler
-
     await handler.close()
 
 
-@pytest.fixture(scope="function")
-async def aiothrottler(aredishandler: AsyncRedisHandler):
-    _throttler.config(aiohandler=aredishandler, keyspace="premier-pytest")
+@pytest.fixture
+async def aiothrottler(async_handler: AsyncDefaultHandler):
+    _throttler.config(aiohandler=async_handler, keyspace="premier-pytest")
     yield _throttler
     await _throttler.aclear()

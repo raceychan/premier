@@ -49,30 +49,12 @@ def logger():
     return _logger
 
 
-<<<<<<< HEAD
-@pytest.fixture(scope="session")
-def redis_handler():
-    redis = Redis.from_url(envs["REDIS_URL"])  # type: ignore
-    handler = RedisHandler(redis=redis)
-    yield handler
-    handler.close()
-
-
-=======
->>>>>>> version/0.4.1
 @pytest.fixture(scope="function")
 def throttler():
     _throttler.config(keyspace="test")
     yield _throttler
 
 
-<<<<<<< HEAD
-@pytest.fixture(scope="function")
-async def aredishandler():
-    aredis = AIORedis.from_url(envs["REDIS_URL"])
-    handler = AsyncRedisHandler(aredis)
-=======
->>>>>>> version/0.4.1
 
 @pytest.fixture
 async def async_handler():

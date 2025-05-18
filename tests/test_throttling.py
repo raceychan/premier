@@ -5,10 +5,6 @@ import pytest
 
 from premier import BucketFullError, QuotaExceedsError, Throttler
 
-<<<<<<< HEAD
-=======
-
->>>>>>> version/0.4.1
 def _keymaker(a: int, b: int) -> str:
     return f"{a}"
 

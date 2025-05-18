@@ -29,14 +29,12 @@ premier is an intuitive throttler that supports various backends and throttling 
 import httpx
 from premier import limits, throttler, ThrottleAlgo, RedisHandler
 
-fixed_window = throttler.fixed_window(quota=3, duration=5)
-
-@fixed_window
+@throttler.fixed_window(quota=3, duration=5)
 def request(url: str) -> str:
     r = httpx.get(url)
     return r.text
 
-@fixed_window
+@throttler.token_bucket(quota=3, duration=5)
 async def async_request(client: httpx.AsyncClient, url: str) -> str:
   r = await client.get('https://www.example.com/')
   return r.text
@@ -82,12 +80,12 @@ by default, premier creates keyspace of this format for throttled functions
 
 {keyspace}:{module}:{funcname}:{algorithm}
 
-| name | explain | default |
-| -  | -  | -|
-| keyspace | customized string provided by user | "premier" |
-| module | module name where function is defined in | func.\_\_module__ |
-| funcname | name of the function | func.\_\_name__ |
-| algorithm | throttling algorithm of the function | fixed_window |
+| name      | explain                                  | default             |
+| --------- | ---------------------------------------- | ------------------- |
+| keyspace  | customized string provided by user       | "premier"           |
+| module    | module name where function is defined in | func.\_\_module\_\_ |
+| funcname  | name of the function                     | func.\_\_name\_\_   |
+| algorithm | throttling algorithm of the function     | fixed_window        |
 
 ### Customized throttle key
 
@@ -104,19 +102,19 @@ def add(a: int, b: int) -> int:
 
 ## Supported Backend
 
-| backend | sync | async |
-| - | - | - |
-| redis | supported | supported |
-| memory | supported | supported |
+| backend | sync      | async     |
+| ------- | --------- | --------- |
+| redis   | supported | supported |
+| memory  | supported | supported |
 
 ## Supported Algorithms
 
-| algorithm | status |
-| - | - |
-| fixed window | supported |
+| algorithm      | status    |
+| -------------- | --------- |
+| fixed window   | supported |
 | sliding window | supported |
-| leaky bucket | supported |
-| token bucket | supported |
+| leaky bucket   | supported |
+| token bucket   | supported |
 
 ## requirements
 

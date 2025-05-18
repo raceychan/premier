@@ -1,40 +1,38 @@
-[tool.poetry]
+[project]
 name = "premier"
-version = "0.4.0"
-description = "an intuitive throttler that supports distributed usage and various throttling algorithms"
-authors = ["raceychan <raceychan@gmail.com>"]
-license = "MIT"
+dynamic = ["version"]
+description = "an extendable toolbox for scalable apis"
+dependencies = []
 readme = "README.md"
-
-[tool.poetry.dependencies]
-python = "^3.10"
-redis = "^5.0.3"
-
-[tool.poetry.group.test.dependencies]
-pytest = "^8.1.1"
-
-[tool.poetry.group.dev.dependencies]
-python-semantic-release = "^9.4.0"
-
-[tool.pyright]
-include = ["src/*.py"]
-typeCheckingMode = "strict"
-exclude = ["tests"]
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["tests"]
-addopts = "--strict-markers --maxfail=1"
-markers = [
-    "integration_test: marks tests as slow integration tests (deselect with '-m \"not integration_test\"')",
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development",
+    "Typing :: Typed",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 
-filterwarnings = ["ignore::DeprecationWarning"]
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.25.3",
+    "pytest-cov>=6.0.0",
+    "hatch>=1.14.0",
+    "twine>=6.1.0",
+]
 
-[tool.semantic_release]
-version_variable = "pyproject.toml:version"
+
+[tool.hatch.version]
+path = "premier/__init__.py"

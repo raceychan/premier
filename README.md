@@ -23,13 +23,17 @@ premier is an intuitive throttler that supports various backends and throttling 
 
 ## Usage
 
-1. decorate functions to be throttled
+- decorate functions to be throttled
 
 ```python
 import httpx
 from premier import limits, throttler, ThrottleAlgo, RedisHandler
 
+<<<<<<< HEAD
 fixed_window = throttler.fixed_window(quota=3, duration=5, algo=ThrottleAlgo.FIXED_WINDOW)
+=======
+fixed_window = throttler.fixed_window(quota=3, duration=5)
+>>>>>>> version/0.4.1
 
 @fixed_window
 def request(url: str) -> str:
@@ -42,7 +46,7 @@ async def async_request(client: httpx.AsyncClient, url: str) -> str:
   return r.text
 ```
 
-2. config throttler when app starts
+- config throttler as your app starts
 
 ```python
 from redis import Redis
@@ -58,6 +62,17 @@ throttler.config(
     algo=ThrottleAlgo.FIXED_WINDOW, # use fix window as the default throttling algorithm
     keyspace="premier", # set premier as the keyspace
 )
+<<<<<<< HEAD
+=======
+```
+
+- use in fastapi
+
+```python
+@app.get("/", dependencies=[Depends(throttler.get_countdown)])
+async def index():
+    return {"msg": "Hello World"}
+>>>>>>> version/0.4.1
 ```
 
 ## Install

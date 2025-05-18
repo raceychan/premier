@@ -55,7 +55,7 @@ AnyAsyncFunc = AsyncFunc[..., ty.Any]
 
 
 def func_keymaker(
-    func: AnySyncFunc | AnyAsyncFunc, algo: "ThrottleAlgo", keyspace: str
+    func: AnySyncFunc | AnyAsyncFunc | MethodType, algo: "ThrottleAlgo", keyspace: str
 ):
     if isinstance(func, MethodType):
         # It's a method, get its class name and method name

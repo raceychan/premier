@@ -1,7 +1,7 @@
 import typing as ty
 
-from premier._types import Duration, KeyMaker, R, ThrottleAlgo
 from premier.errors import ArgumentMissingError
+from premier.interface import Duration, KeyMaker, R, ThrottleAlgo
 from premier.throttler import throttler
 
 

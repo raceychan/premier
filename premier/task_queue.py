@@ -7,8 +7,8 @@ from threading import Lock as ThreadLock
 from redis.asyncio.client import Redis as AIORedis
 from redis.client import Redis
 
-from premier._types import AsyncTaskQueue, QueueItem, TaskQueue
 from premier.errors import QueueFullError
+from premier.interface import AsyncTaskQueue, QueueItem, TaskQueue
 
 
 def json_loads(data: bytes) -> ty.Any:

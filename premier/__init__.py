@@ -7,6 +7,7 @@ from .api import sliding_window as sliding_window
 from .api import throttled as throttled
 from .api import token_bucket as token_bucket
 from .errors import QuotaExceedsError as QuotaExceedsError
+from .handler import AsyncDefaultHandler as AsyncDefaultHandler
 from .handler import AsyncRedisHandler as AsyncRedisHandler
 from .handler import BucketFullError as BucketFullError
 from .handler import DefaultHandler as DefaultHandler
@@ -27,10 +28,7 @@ def int_or_str(value: str):
         return value
 
 
-try:
-    __version__ = metadata.version("redis")
-except metadata.PackageNotFoundError:
-    __version__ = "99.99.99"
+__version__ = "0.3.0"
 
 
 VERSION = tuple(int_or_str(x) for x in __version__.split("."))

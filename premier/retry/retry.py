@@ -3,30 +3,44 @@ import functools
 from collections.abc import Callable
 from typing import Any, Awaitable, TypeVar, Union
 
+from typing_extensions import assert_never
+
 T = TypeVar("T")
-WaitStrategy = Union[int, list[int], Callable[[int], Union[int, float]]]
+
+N = float | int
+
+WaitStrategy = Union[N, list[N], Callable[[int], N]]
 
 
 def wait_time_calculator_factory(wait: WaitStrategy) -> Callable[[int], float]:
     match wait:
         case int():
 
-            def algo(n: int) -> float:
+            def algo(attempts: int) -> float:
+                return wait
+
+        case float():
+
+            def algo(attempts: int) -> float:
                 return wait
 
         case list():
 
-            def algo(n: int) -> float:
-                return wait[n]
+            def algo(attemps: int) -> float:
+                return wait[attemps]
 
         case Callable():
 
-            def algo(n: int) -> float:
-                return wait(n)
+            def algo(attempts: int) -> float:
+                return wait(attempts)
 
-        case _:
-            raise Exception
+        case _ as unreacheable:
+            assert_never(unreacheable)
     return algo
+
+
+# TODO: 1. add `on_fail` callback, receives *args, **kwargs, return R
+# circuitbreaker: bool, if True, call on_fail without calling function
 
 
 def retry(

@@ -243,7 +243,7 @@ class AsyncThrottleHandler(ABC):
     @abstractmethod
     async def leaky_bucket(
         self, key: str, bucket_size: int, quota: int, duration: int
-    ) -> TaskScheduler: ...
+    ) -> AsyncTaskScheduler: ...
 
     @abstractmethod
     async def clear(self, keyspace: str = "") -> None:

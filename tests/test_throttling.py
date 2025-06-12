@@ -1,9 +1,10 @@
 import logging
-import time
+from unittest.mock import patch
 
 import pytest
 
 from premier import BucketFullError, QuotaExceedsError, Throttler
+from premier.throttler import handler
 
 
 def _keymaker(a: int, b: int) -> str:
@@ -40,10 +41,25 @@ def test_method(throttler: Throttler):
         assert len(res) <= quota
 
 
-# @pytest.mark.skip
-def test_throttler_do_not_raise_error(throttler: Throttler):
+def test_throttler_do_not_raise_error():
+    from unittest.mock import Mock
+    from premier.throttler.handler import DefaultHandler
+    from premier.throttler.throttler import Throttler
+    
+    # Create a mock timer that returns values in sequence
+    mock_timer = Mock()
+    # Provide enough values for all timer calls during the test
+    # First 3 calls at t=0, then the final call at t=4 to simulate time progression
+    mock_timer.side_effect = [0, 0, 0, 0, 4, 4, 6, 6]  # Extra values to be safe
+    
+    # Create handler with injected timer
+    handler_with_timer = DefaultHandler(timer=mock_timer)
+    
+    # Create and configure throttler with custom handler
+    throttler = Throttler()
+    throttler.config(handler=handler_with_timer, keyspace="test")
     throttler.clear()
-
+    
     @throttler.fixed_window(quota=2, duration=3)
     def add(a: int, b: int) -> int:
         res = a + b
@@ -51,8 +67,7 @@ def test_throttler_do_not_raise_error(throttler: Throttler):
 
     tries = 3
     res = [add(3, 5) for _ in range(tries - 1)]
-    time.sleep(3)
-    res.append(add(3, 5))
+    res.append(add(3, 5))  # This should work due to mocked time progression
     assert len(res) == tries
 
 
@@ -82,8 +97,24 @@ def test_throttler_with_keymaker(throttler: Throttler):
     assert len(res) == tries
 
 
-def test_throttler_with_token_bucket(throttler: Throttler):
-
+def test_throttler_with_token_bucket():
+    from unittest.mock import Mock
+    from premier.throttler.handler import DefaultHandler
+    from premier.throttler.throttler import Throttler
+    
+    # Create a mock timer that returns values in sequence
+    mock_timer = Mock()
+    # Mock time progression to simulate token bucket refill
+    mock_timer.side_effect = [0, 0, 0, 0, 2]  # First 3 calls at t=0, 4th fails, 5th at t=2
+    
+    # Create handler with injected timer
+    handler_with_timer = DefaultHandler(timer=mock_timer)
+    
+    # Create and configure throttler with custom handler
+    throttler = Throttler()
+    throttler.config(handler=handler_with_timer, keyspace="test")
+    throttler.clear()
+    
     @throttler.token_bucket(quota=3, duration=5, keymaker=_keymaker)
     def add(a: int, b: int) -> int:
         res = a + b
@@ -95,14 +126,13 @@ def test_throttler_with_token_bucket(throttler: Throttler):
         for _ in range(tries):
             res.append(add(3, 5))
     except QuotaExceedsError:
-        time.sleep(5 / 3)
-        res.append(add(3, 5))
+        res.append(add(3, 5))  # This should work due to mocked time progression
 
     assert len(res) == tries
 
 
 # BUG: this would leave "p" and "t" to redis and won't be removed
-def test_throttler_with_leaky_bucket(throttler: Throttler, logger: logging.Logger):
+def test_throttler_with_leaky_bucket(throttler: Throttler):
     bucket_size = 3
     quota = 1
     duration = 1
@@ -114,7 +144,8 @@ def test_throttler_with_leaky_bucket(throttler: Throttler, logger: logging.Logge
         keymaker=_keymaker,
     )
     def add(a: int, b: int) -> None:
-        time.sleep(0.1)
+        # Remove sleep to speed up test  
+        return None
 
     tries = 6
     rejected = 0

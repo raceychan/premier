@@ -19,7 +19,8 @@ async def test_async_throttler_with_leaky_bucket(
         bucket_size=bucket_size,
     )
     async def add(a: int, b: int) -> None:
-        await asyncio.sleep(0.1)
+        # Remove sleep to speed up test
+        pass
 
     todo = set[asyncio.Task[None]]()
     rejected = 0

@@ -3,7 +3,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from time import perf_counter as clock
-from typing import Any, Awaitable, Callable, ClassVar, Generic, Hashable, TypeVar, cast
+from typing import Any, Awaitable, Callable, ClassVar, Generic, Hashable, TypeVar, cast, Protocol
 
 from premier._logs import logger as logger
 from premier.throttler.errors import BucketFullError, QueueFullError
@@ -19,21 +19,25 @@ from premier.throttler.interface import (
 )
 from premier.throttler.task_queue import IQueue
 
-# from redis.exceptions import ResponseError as RedisExceptionResponse
-
 TaskArgs = tuple[tuple[Any, ...], dict[Any, Any]]
 
 
+class Timer(Protocol):
+    def __call__(self) -> float:
+        ...
+
+
 class DefaultHandler(ThrottleHandler):
-    def __init__(self, counter: dict[str, Any] | None = None):
+    def __init__(self, counter: dict[str, Any] | None = None, timer: Timer | None = None):
         self._counter = counter or dict[str, Any]()
         self._queue_registry: dict[Hashable, TaskQueue[TaskArgs]] = dict()
         self._executors = ThreadPoolExecutor()
+        self._timer = timer or clock
 
     def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
-        time, cnt = self._counter.get(key, (clock() + duration, 0))
+        time, cnt = self._counter.get(key, (self._timer() + duration, 0))
 
-        if (now := clock()) > time:
+        if (now := self._timer()) > time:
             self._counter[key] = (now + duration, 1)
             return -1  # Available now
 
@@ -45,7 +49,7 @@ class DefaultHandler(ThrottleHandler):
         return -1  # Token was available, no wait needed
 
     def sliding_window(self, key: str, quota: int, duration: int) -> CountDown:
-        now = clock()
+        now = self._timer()
         time, cnt = self._counter.get(key, (now, 0))
 
         # Calculate remaining quota and adjust based on time passed
@@ -66,7 +70,7 @@ class DefaultHandler(ThrottleHandler):
         return -1
 
     def token_bucket(self, key: str, quota: int, duration: int) -> CountDown:
-        now = clock()
+        now = self._timer()
 
         last_token_time, tokens = self._counter.get(key, (now, quota))
 
@@ -92,7 +96,7 @@ class DefaultHandler(ThrottleHandler):
             )
 
         def _calculate_delay(key: str, quota: int, duration: int) -> CountDown:
-            now = clock()
+            now = self._timer()
             last_execution_time = self._counter.get(key, None)
             if not last_execution_time:
                 self._counter[key] = now
@@ -137,19 +141,20 @@ class DefaultHandler(ThrottleHandler):
 
 
 class AsyncDefaultHandler(AsyncThrottleHandler):
-    def __init__(self, counter: dict[str, Any] | None = None):
+    def __init__(self, counter: dict[str, Any] | None = None, timer: Timer | None = None):
         self._counter = counter or dict[str, Any]()
         self._queue_registry: dict[Hashable, TaskQueue[TaskArgs]] = dict()
         self._executors = ThreadPoolExecutor()
+        self._timer = timer or clock
 
     async def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
         if key not in self._counter and quota >= 1:
-            self._counter[key] = (clock() + duration, 1)
+            self._counter[key] = (self._timer() + duration, 1)
             return -1
 
         time, cnt = self._counter[key]
 
-        if (now := clock()) > time:
+        if (now := self._timer()) > time:
             self._counter[key] = (now + duration, 1)
             return -1  # Available now
 
@@ -161,7 +166,7 @@ class AsyncDefaultHandler(AsyncThrottleHandler):
         return -1  # Token was available, no wait needed
 
     async def sliding_window(self, key: str, quota: int, duration: int) -> CountDown:
-        now = clock()
+        now = self._timer()
         time, cnt = self._counter.get(key, (now, 0))
 
         # Calculate remaining quota and adjust based on time passed
@@ -182,7 +187,7 @@ class AsyncDefaultHandler(AsyncThrottleHandler):
         return -1
 
     async def token_bucket(self, key: str, quota: int, duration: int) -> CountDown:
-        now = clock()
+        now = self._timer()
 
         last_token_time, tokens = self._counter.get(key, (now, quota))
 
@@ -208,7 +213,7 @@ class AsyncDefaultHandler(AsyncThrottleHandler):
             )
 
         def _calculate_delay(key: str, quota: int, duration: int) -> CountDown:
-            now = clock()
+            now = self._timer()
             last_execution_time = self._counter.get(key, None)
             if not last_execution_time:
                 self._counter[key] = now
@@ -278,7 +283,7 @@ else:
 
         def __init__(self, redis: TRedisClient, *, script_path: Path | None = None):
             self._script_path = script_path or (Path(__file__).parent / "lua")
-            self.fixed_window_script = redis.register_script(
+            self.fixed_window = redis.register_script(
                 (self._script_path / "fixed_window.lua").read_text()
             )
             self.sliding_window = redis.register_script(
@@ -303,9 +308,7 @@ else:
             self._queue_registry: dict[Hashable, RedisQueue[TaskArgs]] = {}
 
         def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
-            res = self._script_loader.fixed_window_script(
-                keys=(key,), args=(quota, duration)
-            )
+            res = self._script_loader.fixed_window(keys=(key,), args=(quota, duration))
             res = cast(CountDown, res)
             return res
 
@@ -379,7 +382,7 @@ else:
             self._queue_registry: dict[Hashable, AsyncRedisQueue[TaskArgs]] = {}
 
         async def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
-            res = await self._script_loader.fixed_window_script(  # type: ignore
+            res = await self._script_loader.fixed_window(  # type: ignore
                 keys=(key,), args=(quota, duration)
             )
             res = cast(CountDown, res)

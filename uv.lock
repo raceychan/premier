@@ -627,7 +627,7 @@ wheels = [
 
 [[package]]
 name = "premier"
-source = { virtual = "." }
+source = { editable = "." }
 
 [package.dev-dependencies]
 dev = [

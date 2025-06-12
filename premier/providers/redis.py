@@ -21,11 +21,11 @@ try:
             except (json.JSONDecodeError, TypeError):
                 return value
 
-        async def set(self, key: str, value: Any) -> None:
+        async def set(self, key: str, value: Any, ex: int | None = None) -> None:
             if isinstance(value, (str, bytes, int, float)):
-                await self._redis.set(key, value)
+                await self._redis.set(key, value, ex=ex)
             else:
-                await self._redis.set(key, json.dumps(value))
+                await self._redis.set(key, json.dumps(value), ex=ex)
 
         async def delete(self, key: str) -> None:
             await self._redis.delete(key)

@@ -8,8 +8,8 @@ class AsyncCacheProvider(Protocol):
         """Get value by key. Returns None if key doesn't exist."""
         ...
 
-    async def set(self, key: str, value: ty.Any) -> None:
-        """Set key-value pair."""
+    async def set(self, key: str, value: ty.Any, ex: int | None = None) -> None:
+        """Set key-value pair with optional expiration time in seconds."""
         ...
 
     async def delete(self, key: str) -> None:

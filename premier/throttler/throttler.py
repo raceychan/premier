@@ -2,6 +2,7 @@ import inspect
 from functools import wraps
 from typing import Awaitable, Callable
 
+from premier.providers import AsyncInMemoryCache
 from premier.throttler.errors import QuotaExceedsError, UninitializedHandlerError
 from premier.throttler.handler import AsyncDefaultHandler
 from premier.throttler.interface import (
@@ -14,7 +15,6 @@ from premier.throttler.interface import (
 )
 
 
-
 class Throttler:
     """
     Async-only throttler for rate limiting functions
@@ -24,30 +24,19 @@ class Throttler:
     _keyspace: str
     _algo: ThrottleAlgo
 
-    def __init__(self):
-        self.__ready = False
-
-    @property
-    def ready(self):
-        return self.__ready
+    def __init__(
+        self,
+        handler: AsyncThrottleHandler | None = None,
+        algo: ThrottleAlgo = ThrottleAlgo.FIXED_WINDOW,
+        keyspace: str = "premier:throttler",
+    ):
+        self._aiohandler = handler or AsyncDefaultHandler(AsyncInMemoryCache())
+        self._algo = algo
+        self._keyspace = keyspace
 
     @property
     def default_algo(self):
         return self._algo
-
-    def config(
-        self,
-        *,
-        handler: AsyncThrottleHandler | None = None,
-        algo: ThrottleAlgo = ThrottleAlgo.FIXED_WINDOW,
-        keyspace: str = "premier",
-    ):
-        from premier.providers import AsyncInMemoryCache
-        self._aiohandler = handler or AsyncDefaultHandler(AsyncInMemoryCache())
-        self._algo = algo
-        self._keyspace = keyspace
-        self.__ready = True
-        return self
 
     async def clear(self, keyspace: str | None = None):
         if not self._aiohandler:
@@ -55,7 +44,6 @@ class Throttler:
         if keyspace is None:
             keyspace = self._keyspace
         await self._aiohandler.clear(keyspace)
-
 
     def throttle(
         self,
@@ -65,7 +53,7 @@ class Throttler:
         keymaker: KeyMaker | None = None,
         bucket_size: int = -1,
     ) -> Callable[[Callable[P, R]], Callable[P, Awaitable[R | None]]]:
-        
+
         def wrapper(func: Callable[P, R]) -> Callable[P, Awaitable[R | None]]:
             @wraps(func)
             async def ainner(*args: P.args, **kwargs: P.kwargs) -> R | None:
@@ -89,7 +77,7 @@ class Throttler:
                 )
                 if countdown != -1:
                     raise QuotaExceedsError(quota, duration, countdown)
-                
+
                 # Handle both sync and async functions
                 if inspect.iscoroutinefunction(func):
                     return await func(*args, **kwargs)
@@ -159,5 +147,5 @@ class Throttler:
         raise QuotaExceedsError(quota, duration, countdown)
 
 
-from premier.providers import AsyncInMemoryCache
-throttler = Throttler().config(handler=AsyncDefaultHandler(AsyncInMemoryCache()))
+# from premier.providers import AsyncInMemoryCache
+# throttler = Throttler().config(handler=AsyncDefaultHandler(AsyncInMemoryCache()))

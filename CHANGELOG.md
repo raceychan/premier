@@ -114,3 +114,15 @@ merge latest dev branch ([`8523182`](https://github.com/raceychan/pythrottler/co
 * feat: first commit ([`4a83c49`](https://github.com/raceychan/pythrottler/commit/4a83c499ea5ee0631e3667e10e2526407890f5c6))
 
 * feat: first commit ([`7be616c`](https://github.com/raceychan/pythrottler/commit/7be616ca6200e8452d9eabebc93b0bbec01c1291))
+
+
+## version 0.4.3
+
+Feature
+
+- [x] `cache` 
+
+
+refactor:
+
+No longer support sync version of decorator, which means all decorated function would be async.

@@ -24,7 +24,7 @@ async def test_throttle_raise_error(aiothrottler: Throttler):
     for _ in range(quota):
         result = await add(3, 5)
         assert result == 8
-    
+
     # 4th call should raise QuotaExceedsError
     with pytest.raises(QuotaExceedsError):
         await add(3, 5)
@@ -44,7 +44,7 @@ async def test_method(aiothrottler: Throttler):
     for _ in range(quota):
         result = await t.add(3, 5)
         assert result == 8
-    
+
     # 4th call should raise QuotaExceedsError
     with pytest.raises(QuotaExceedsError):
         await t.add(3, 5)
@@ -52,24 +52,24 @@ async def test_method(aiothrottler: Throttler):
 
 async def test_throttler_do_not_raise_error():
     from unittest.mock import Mock
-    from premier.throttler.handler import AsyncDefaultHandler
+
     from premier.providers import AsyncInMemoryCache
+    from premier.throttler.handler import AsyncDefaultHandler
     from premier.throttler.throttler import Throttler
-    
+
     # Create a mock timer that returns values in sequence
     mock_timer = Mock()
     # Provide enough values for all timer calls during the test
     # First 3 calls at t=0, then the final call at t=4 to simulate time progression
     mock_timer.side_effect = [0, 0, 0, 0, 4, 4, 6, 6]  # Extra values to be safe
-    
+
     # Create handler with injected timer
     handler_with_timer = AsyncDefaultHandler(AsyncInMemoryCache(), timer=mock_timer)
-    
+
     # Create and configure throttler with custom handler
-    throttler = Throttler()
-    throttler.config(handler=handler_with_timer, keyspace="test")
+    throttler = Throttler(handler=handler_with_timer, keyspace="test")
     await throttler.clear()
-    
+
     @throttler.fixed_window(quota=2, duration=3)
     def add(a: int, b: int) -> int:  # sync function
         res = a + b
@@ -80,7 +80,7 @@ async def test_throttler_do_not_raise_error():
     for _ in range(tries):
         res.append(await add(3, 5))  # decorated function is async
     assert len(res) == tries
-    
+
     # The third call should be throttled
     try:
         await add(3, 5)
@@ -117,23 +117,29 @@ async def test_throttler_with_keymaker(aiothrottler: Throttler):
 
 async def test_throttler_with_token_bucket():
     from unittest.mock import Mock
-    from premier.throttler.handler import AsyncDefaultHandler
+
     from premier.providers import AsyncInMemoryCache
+    from premier.throttler.handler import AsyncDefaultHandler
     from premier.throttler.throttler import Throttler
-    
+
     # Create a mock timer that returns values in sequence
     mock_timer = Mock()
     # Mock time progression to simulate token bucket refill
-    mock_timer.side_effect = [0, 0, 0, 0, 2]  # First 3 calls at t=0, 4th fails, 5th at t=2
-    
+    mock_timer.side_effect = [
+        0,
+        0,
+        0,
+        0,
+        2,
+    ]  # First 3 calls at t=0, 4th fails, 5th at t=2
+
     # Create handler with injected timer
     handler_with_timer = AsyncDefaultHandler(AsyncInMemoryCache(), timer=mock_timer)
-    
+
     # Create and configure throttler with custom handler
-    throttler = Throttler()
-    throttler.config(handler=handler_with_timer, keyspace="test")
+    throttler = Throttler(handler=handler_with_timer, keyspace="test")
     await throttler.clear()
-    
+
     @throttler.token_bucket(quota=3, duration=5, keymaker=_keymaker)
     def add(a: int, b: int) -> int:  # sync function
         res = a + b
@@ -163,7 +169,7 @@ async def test_throttler_with_leaky_bucket(aiothrottler: Throttler):
         keymaker=_keymaker,
     )
     def add(a: int, b: int) -> None:  # sync function
-        # Remove sleep to speed up test  
+        # Remove sleep to speed up test
         return None
 
     tries = 6

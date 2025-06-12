@@ -102,6 +102,6 @@ class Cache:
         return wrapper
 
 
-# Create default cache instance
-from premier.providers import AsyncInMemoryCache
-cache = Cache(cache_provider=AsyncInMemoryCache())
+# # Create default cache instance
+# from premier.providers import AsyncInMemoryCache
+# cache = Cache(cache_provider=AsyncInMemoryCache())

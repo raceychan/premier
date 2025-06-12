@@ -4,13 +4,12 @@ from .throttler.api import sliding_window as sliding_window
 from .throttler.api import throttled as throttled
 from .throttler.api import token_bucket as token_bucket
 from .throttler.errors import QuotaExceedsError as QuotaExceedsError
-from .throttler.handler import BucketFullError as BucketFullError
+from .throttler.errors import BucketFullError as BucketFullError
 from .throttler.throttler import Throttler as Throttler
 from .throttler.throttler import throttler as throttler
 
 try:
-    from .throttler.handler import AsyncRedisHandler as AsyncRedisHandler
-    from .throttler.handler import RedisHandler as RedisHandler
+    from .providers.redis import AsyncRedisHandler as AsyncRedisHandler
 except ImportError:
     pass
 

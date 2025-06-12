@@ -336,18 +336,18 @@ class TestProtocols:
             
         asyncio.run(run_test())
         
-    def test_task_queue_protocol_methods(self):
-        """Test TaskQueue protocol method signatures"""
-        from premier.throttler.interface import TaskQueue
+    def test_async_task_queue_protocol_methods_original(self):
+        """Test original async TaskQueue protocol method signatures"""
+        from premier.throttler.interface import AsyncTaskQueue
         
         # This is mainly a type checking test
         # The actual implementation would be tested in concrete classes
-        assert hasattr(TaskQueue, 'put')
-        assert hasattr(TaskQueue, 'get')
-        assert hasattr(TaskQueue, 'qsize')
-        assert hasattr(TaskQueue, 'empty')
-        assert hasattr(TaskQueue, 'full')
-        assert hasattr(TaskQueue, 'capacity')
+        assert hasattr(AsyncTaskQueue, 'put')
+        assert hasattr(AsyncTaskQueue, 'get')
+        assert hasattr(AsyncTaskQueue, 'qsize')
+        assert hasattr(AsyncTaskQueue, 'empty')
+        assert hasattr(AsyncTaskQueue, 'full')
+        assert hasattr(AsyncTaskQueue, 'capacity')
         
     def test_async_task_queue_protocol_methods(self):
         """Test AsyncTaskQueue protocol method signatures"""
@@ -364,30 +364,32 @@ class TestProtocols:
 
 
 class TestThrottleHandlerDispatch:
-    def test_throttle_handler_dispatch_fixed_window(self):
-        """Test ThrottleHandler dispatch for fixed window"""
-        from premier.throttler.interface import ThrottleHandler
+    def test_async_throttle_handler_dispatch_fixed_window(self):
+        """Test AsyncThrottleHandler dispatch for fixed window"""
+        from premier.throttler.interface import AsyncThrottleHandler
         
-        class MockHandler(ThrottleHandler):
-            def fixed_window(self, key: str, quota: int, duration: int):
-                return "fixed_window_result"
+        class MockAsyncHandler(AsyncThrottleHandler):
+            async def fixed_window(self, key: str, quota: int, duration: int):
+                return "async_fixed_window_result"
                 
-            def sliding_window(self, key: str, quota: int, duration: int):
-                return "sliding_window_result"
+            async def sliding_window(self, key: str, quota: int, duration: int):
+                return "async_sliding_window_result"
                 
-            def token_bucket(self, key: str, quota: int, duration: int):
-                return "token_bucket_result"
+            async def token_bucket(self, key: str, quota: int, duration: int):
+                return "async_token_bucket_result"
                 
             def leaky_bucket(self, key: str, bucket_size: int, quota: int, duration: int):
-                return lambda: "leaky_bucket_result"
+                async def scheduler():
+                    return "async_leaky_bucket_result"
+                return scheduler
                 
-            def clear(self, keyspace: str) -> None:
+            async def clear(self, keyspace: str = "") -> None:
                 pass
                 
-            def close(self) -> None:
+            async def close(self) -> None:
                 pass
                 
-        handler = MockHandler()
+        handler = MockAsyncHandler()
         
         # Test dispatch for each algorithm
         assert handler.dispatch(ThrottleAlgo.FIXED_WINDOW) == handler.fixed_window

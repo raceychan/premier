@@ -1,7 +1,9 @@
+.PHONY: test cov
+
 test:
 	uv run pytest -sv 
 	
-report:
+cov:
 	uv run pytest -sv --cov-report term-missing --cov=premier tests/
 
 # ================ CI =======================

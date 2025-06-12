@@ -26,8 +26,8 @@ def wait_time_calculator_factory(wait: WaitStrategy) -> Callable[[int], float]:
 
         case list():
 
-            def algo(attemps: int) -> float:
-                return wait[attemps]
+            def algo(attempts: int) -> float:
+                return wait[attempts]
 
         case Callable():
 

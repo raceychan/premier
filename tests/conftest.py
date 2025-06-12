@@ -6,6 +6,7 @@ import pytest
 
 from premier.throttler.throttler import throttler as _throttler
 from premier.throttler.handler import AsyncDefaultHandler
+from premier.providers import AsyncInMemoryCache
 
 
 def read_envs(file: Path) -> dict[str, str]:
@@ -47,19 +48,21 @@ def logger():
 
 @pytest.fixture(scope="function")
 def throttler():
-    _throttler.config(keyspace="test")
+    cache = AsyncInMemoryCache()
+    _throttler.config(handler=AsyncDefaultHandler(cache), keyspace="test")
     yield _throttler
 
 
 @pytest.fixture
 async def async_handler():
-    handler = AsyncDefaultHandler()
+    cache = AsyncInMemoryCache()
+    handler = AsyncDefaultHandler(cache)
     yield handler
     await handler.close()
 
 
 @pytest.fixture
 async def aiothrottler(async_handler: AsyncDefaultHandler):
-    _throttler.config(aiohandler=async_handler, keyspace="premier-pytest")
+    _throttler.config(handler=async_handler, keyspace="premier-pytest")
     yield _throttler
-    await _throttler.aclear()
+    await _throttler.clear()

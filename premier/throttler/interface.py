@@ -26,7 +26,6 @@ ArgsT = TypeVar(
     contravariant=True,
 )
 ResultT = TypeVar("ResultT", bound=Any, covariant=True)
-TaskScheduler = Callable[[Callable[..., None], Any, Any], None]
 AsyncTaskScheduler = Callable[..., Awaitable[None]]
 
 
@@ -68,15 +67,6 @@ def make_key(
     return f"{key}:{keymaker(*args, **kwargs)}"
 
 
-class TaskQueue(Protocol, Generic[QueueItem]):
-    def put(self, item: QueueItem) -> None: ...
-    def get(self, block: bool = True, *, timeout: float = 0) -> QueueItem: ...
-    def qsize(self) -> int: ...
-    def empty(self) -> bool: ...
-    def full(self) -> bool: ...
-    @property
-    @abstractmethod
-    def capacity(self) -> int: ...
 
 
 class AsyncTaskQueue(Protocol, Generic[QueueItem]):
@@ -88,6 +78,8 @@ class AsyncTaskQueue(Protocol, Generic[QueueItem]):
     @property
     @abstractmethod
     def capacity(self) -> int: ...
+
+
 
 
 class SyncFunc(Protocol[P, R]):
@@ -172,9 +164,7 @@ class Duration:
 
 class AlgoTypeEnum(Enum):
     @staticmethod
-    def _generate_next_value_(
-        name: str, start: int, count: int, last_values: list[Any]
-    ):
+    def _generate_next_value_(name: str, _start: int, _count: int, _last_values: list[Any]):
         return name.lower()  # type: ignore
 
 
@@ -185,45 +175,6 @@ class ThrottleAlgo(str, AlgoTypeEnum):
     SLIDING_WINDOW = auto()
 
 
-class ThrottleHandler(ABC):
-
-    @abstractmethod
-    def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
-        pass
-
-    @abstractmethod
-    def sliding_window(self, key: str, quota: int, duration: int) -> CountDown:
-        pass
-
-    @abstractmethod
-    def token_bucket(self, key: str, quota: int, duration: int) -> CountDown:
-        pass
-
-    @abstractmethod
-    def leaky_bucket(
-        self, key: str, bucket_size: int, quota: int, duration: int
-    ) -> TaskScheduler:
-        pass
-
-    @abstractmethod
-    def clear(self, keyspace: str) -> None:
-        pass
-
-    @abstractmethod
-    def close(self) -> None:
-        pass
-
-    def dispatch(self, algo: ThrottleAlgo):
-        "does not handle leaky bucket case"
-        match algo:
-            case ThrottleAlgo.FIXED_WINDOW:
-                return self.fixed_window
-            case ThrottleAlgo.SLIDING_WINDOW:
-                return self.sliding_window
-            case ThrottleAlgo.TOKEN_BUCKET:
-                return self.token_bucket
-            case _:
-                raise NotImplementedError
 
 
 class AsyncThrottleHandler(ABC):
@@ -241,7 +192,7 @@ class AsyncThrottleHandler(ABC):
         pass
 
     @abstractmethod
-    async def leaky_bucket(
+    def leaky_bucket(
         self, key: str, bucket_size: int, quota: int, duration: int
     ) -> AsyncTaskScheduler: ...
 

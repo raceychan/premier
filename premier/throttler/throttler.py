@@ -1,31 +1,26 @@
 import inspect
 from functools import wraps
-from typing import Any, Callable, Literal, cast, overload
+from typing import Awaitable, Callable
 
 from premier.throttler.errors import QuotaExceedsError, UninitializedHandlerError
-from premier.throttler.handler import DefaultHandler, ThrottleHandler
+from premier.throttler.handler import AsyncDefaultHandler
 from premier.throttler.interface import (
-    AsyncFunc,
     AsyncThrottleHandler,
     KeyMaker,
     P,
     R,
-    SyncFunc,
     ThrottleAlgo,
     make_key,
 )
 
-AnyFunc = Callable[P, R]
 
 
 class Throttler:
     """
-    This is a singleton, we might want to create sub instances
-    with different configs
+    Async-only throttler for rate limiting functions
     """
 
-    _handler: ThrottleHandler
-    _aiohanlder: Any
+    _aiohandler: AsyncThrottleHandler
     _keyspace: str
     _algo: ThrottleAlgo
 
@@ -42,55 +37,25 @@ class Throttler:
 
     def config(
         self,
-        handler: ThrottleHandler | None = None,
         *,
-        aiohandler: AsyncThrottleHandler | None = None,
+        handler: AsyncThrottleHandler | None = None,
         algo: ThrottleAlgo = ThrottleAlgo.FIXED_WINDOW,
         keyspace: str = "premier",
     ):
-        self._handler = handler or DefaultHandler()
-        self._aiohandler = aiohandler
+        from premier.providers import AsyncInMemoryCache
+        self._aiohandler = handler or AsyncDefaultHandler(AsyncInMemoryCache())
         self._algo = algo
         self._keyspace = keyspace
         self.__ready = True
         return self
 
-    def clear(self, keyspace: str | None = None):
-        if not self._handler:
-            return
-        if keyspace is None:
-            keyspace = self._keyspace
-        self._handler.clear(keyspace)
-
-    async def aclear(self, keyspace: str | None = None):
+    async def clear(self, keyspace: str | None = None):
         if not self._aiohandler:
             return
         if keyspace is None:
             keyspace = self._keyspace
         await self._aiohandler.clear(keyspace)
 
-    @overload
-    def throttle(
-        self,
-        throttle_algo: (
-            Literal[ThrottleAlgo.FIXED_WINDOW]
-            | Literal[ThrottleAlgo.SLIDING_WINDOW]
-            | Literal[ThrottleAlgo.TOKEN_BUCKET]
-        ),
-        quota: int,
-        duration: int,
-        keymaker: KeyMaker | None = None,
-    ) -> Callable[[SyncFunc[P, R]], SyncFunc[P, R]]: ...
-
-    @overload
-    def throttle(
-        self,
-        throttle_algo: Literal[ThrottleAlgo.LEAKY_BUCKET],
-        quota: int,
-        duration: int,
-        keymaker: KeyMaker | None = None,
-        bucket_size: int = -1,
-    ) -> Callable[[SyncFunc[P, R]], SyncFunc[P, R]]: ...
 
     def throttle(
         self,
@@ -99,74 +64,39 @@ class Throttler:
         duration: int,
         keymaker: KeyMaker | None = None,
         bucket_size: int = -1,
-    ) -> (
-        Callable[[Callable[..., R]], Callable[..., R]]
-        | Callable[[Callable[..., None]], Callable[..., None]]
-    ):
-
-        @overload
-        def wrapper(func: SyncFunc[P, R]) -> SyncFunc[P, R]: ...
-
-        @overload
-        def wrapper(func: AsyncFunc[P, R]) -> AsyncFunc[P, R]: ...
-
-        def wrapper(
-            func: SyncFunc[P, R] | AsyncFunc[P, R],
-        ) -> SyncFunc[P, R] | AsyncFunc[P, R]:
-            if not inspect.iscoroutinefunction(func):
-                func = cast(SyncFunc[P, R], func)
-
-                @wraps(func)
-                def inner(*args: P.args, **kwargs: P.kwargs) -> R | None:
-                    key = make_key(
-                        func,
-                        algo=throttle_algo,
-                        keyspace=self._keyspace,
-                        args=args,
-                        kwargs=kwargs,
-                        keymaker=keymaker,
+    ) -> Callable[[Callable[P, R]], Callable[P, Awaitable[R | None]]]:
+        
+        def wrapper(func: Callable[P, R]) -> Callable[P, Awaitable[R | None]]:
+            @wraps(func)
+            async def ainner(*args: P.args, **kwargs: P.kwargs) -> R | None:
+                if not self._aiohandler:
+                    raise UninitializedHandlerError("Async handler not configured")
+                key = make_key(
+                    func,
+                    algo=throttle_algo,
+                    keyspace=self._keyspace,
+                    args=args,
+                    kwargs=kwargs,
+                    keymaker=keymaker,
+                )
+                if throttle_algo is ThrottleAlgo.LEAKY_BUCKET:
+                    scheduler = self._aiohandler.leaky_bucket(
+                        key, bucket_size=bucket_size, quota=quota, duration=duration
                     )
-                    if throttle_algo is ThrottleAlgo.LEAKY_BUCKET:
-                        scheduler = self._handler.leaky_bucket(
-                            key, bucket_size=bucket_size, quota=quota, duration=duration
-                        )
-                        return scheduler(func, *args, **kwargs)
-                    countdown = self._handler.dispatch(throttle_algo)(
-                        key, quota=quota, duration=duration
-                    )
-                    if countdown != -1:
-                        raise QuotaExceedsError(quota, duration, countdown)
+                    return await scheduler(func, *args, **kwargs)
+                countdown = await self._aiohandler.dispatch(throttle_algo)(
+                    key, quota=quota, duration=duration
+                )
+                if countdown != -1:
+                    raise QuotaExceedsError(quota, duration, countdown)
+                
+                # Handle both sync and async functions
+                if inspect.iscoroutinefunction(func):
+                    return await func(*args, **kwargs)
+                else:
                     return func(*args, **kwargs)
 
-                return inner
-            else:
-                func = cast(AsyncFunc[P, R], func)
-
-                @wraps(func)
-                async def ainner(*args: P.args, **kwargs: P.kwargs) -> R | None:
-                    if not self._aiohandler:
-                        raise UninitializedHandlerError("Async handler not configured")
-                    key = make_key(
-                        func,
-                        algo=throttle_algo,
-                        keyspace=self._keyspace,
-                        args=args,
-                        kwargs=kwargs,
-                        keymaker=keymaker,
-                    )
-                    if throttle_algo is ThrottleAlgo.LEAKY_BUCKET:
-                        scheduler = self._aiohandler.leaky_bucket(
-                            key, bucket_size=bucket_size, quota=quota, duration=duration
-                        )
-                        return await scheduler(func, *args, **kwargs)
-                    countdown = await self._aiohandler.dispatch(throttle_algo)(
-                        key, quota=quota, duration=duration
-                    )
-                    if countdown != -1:
-                        raise QuotaExceedsError(quota, duration, countdown)
-                    return await func(*args, **kwargs)
-
-                return ainner
+            return ainner
 
         return wrapper
 
@@ -229,4 +159,5 @@ class Throttler:
         raise QuotaExceedsError(quota, duration, countdown)
 
 
-throttler = Throttler().config(DefaultHandler())
+from premier.providers import AsyncInMemoryCache
+throttler = Throttler().config(handler=AsyncDefaultHandler(AsyncInMemoryCache()))

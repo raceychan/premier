@@ -37,4 +37,7 @@ async def test_async_throttler_with_leaky_bucket(
         except BucketFullError:
             rejected += 1
 
-    assert rejected == tries - (bucket_size + quota)
+    # In leaky bucket: bucket_size allows immediate tasks, quota determines rate
+    # So we expect bucket_size tasks to succeed immediately, rest rejected
+    expected_rejected = tries - bucket_size
+    assert rejected == expected_rejected

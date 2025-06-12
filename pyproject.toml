@@ -1,32 +1,31 @@
-[tool.poetry]
+[project]
 name = "premier"
-version = "0.3.0"
+version = "0.4.2"
 description = "an intuitive throttler supports distributed usage and various throttling algorithms"
-authors = ["raceychan <raceychan@gmail.com>"]
-license = "MIT"
+authors = [{ name = "raceychan", email = "raceychan@gmail.com" }]
+requires-python = "~=3.10"
 readme = "README.md"
+license = "MIT"
+dependencies = ["redis>=5.0.3,<6"]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-redis = "^5.0.3"
+[dependency-groups]
+test = ["pytest>=8.1.1,<9"]
+dev = ["python-semantic-release>=9.4.0,<10"]
 
+[tool.uv]
+default-groups = [
+    "test",
+    "dev",
+]
 
-[tool.poetry.group.test.dependencies]
-pytest = "^8.1.1"
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.pyright]
 include = ["src/*.py"]
 typeCheckingMode = "strict"
 exclude = ["tests"]
-
-
-[tool.poetry.group.dev.dependencies]
-python-semantic-release = "^9.4.0"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

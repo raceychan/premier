@@ -105,9 +105,8 @@ def add(a: int, b: int) -> int:
 
 TODO:
 
-- [ ] support lowering version python by using type-extensions
 
-- [ ] implement timeout feature
+- [x] implement timeout feature
 - [ ] implement retry feature
 - [ ] implement cache feature
 

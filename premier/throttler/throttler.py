@@ -1,17 +1,23 @@
 import threading
 import typing as ty
 from functools import wraps
+from typing import Callable
 
-from premier._types import (
+from premier.throttler.handlers import (
+    DefaultHandler,
+    QuotaExceedsError,
+    ThrottleHandler,
+)
+from premier.throttler.interface import (
     KeyMaker,
     LBThrottleInfo,
     P,
     R,
-    SyncFunc,
     ThrottleAlgo,
     ThrottleInfo,
 )
-from premier.handlers import DefaultHandler, QuotaExceedsError, ThrottleHandler
+
+AnyFunc = Callable[P, R]
 
 
 class _Throttler:
@@ -22,6 +28,7 @@ class _Throttler:
 
     # _counter: QuotaCounter[ty.Hashable, ty.Any]
     _handler: ThrottleHandler
+    _aiohanlder: ty.Any
     _keyspace: str
     _algo: ThrottleAlgo
     _lock: threading.Lock
@@ -65,7 +72,7 @@ class _Throttler:
         *,
         keymaker: KeyMaker | None = None,
     ) -> ty.Callable[[ty.Callable[..., None]], ty.Callable[..., None]]:
-        def wrapper(func: SyncFunc[P, None]):
+        def wrapper(func: AnyFunc[P, None]):
             info = LBThrottleInfo(
                 func=func,
                 algo=ThrottleAlgo.LEAKY_BUCKET,
@@ -92,7 +99,7 @@ class _Throttler:
         duration: int,
         keymaker: KeyMaker | None = None,
     ) -> ty.Callable[[ty.Callable[..., R]], ty.Callable[..., R]]:
-        def wrapper(func: SyncFunc[P, R]) -> SyncFunc[P, R]:
+        def wrapper(func: AnyFunc[P, R]) -> AnyFunc[P, R]:
             info = ThrottleInfo(
                 func=func,
                 keyspace=self._keyspace,

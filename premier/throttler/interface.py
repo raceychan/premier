@@ -4,6 +4,7 @@ from enum import Enum, auto
 from types import FunctionType, MethodType
 from typing import (
     Any,
+    Awaitable,
     Callable,
     Generic,
     Iterable,
@@ -13,10 +14,6 @@ from typing import (
     Sequence,
     TypeVar,
 )
-
-P = ParamSpec("P")
-R = TypeVar("R")
-
 
 KeyMaker = Callable[..., str]
 CountDown = Literal[-1] | float
@@ -30,6 +27,13 @@ ArgsT = TypeVar(
 )
 ResultT = TypeVar("ResultT", bound=Any, covariant=True)
 TaskScheduler = Callable[[Callable[..., None], Any, Any], None]
+AsyncTaskScheduler = Callable[..., Awaitable[None]]
+
+
+T = TypeVar("T")
+P = ParamSpec("P")
+R = TypeVar("R", covariant=True)
+QueueItem = TypeVar("QueueItem")
 
 
 def func_keymaker(func: Callable[..., Any], algo: "ThrottleAlgo", keyspace: str):
@@ -48,6 +52,54 @@ def func_keymaker(func: Callable[..., Any], algo: "ThrottleAlgo", keyspace: str)
             fid = ""
 
     return f"{keyspace}:{algo.value}:{func.__module__}:{fid}"
+
+
+def make_key(
+    func: Callable[..., Any],
+    algo: "ThrottleAlgo",
+    keyspace: str,
+    keymaker: KeyMaker | None,
+    args: tuple[object, ...],
+    kwargs: dict[Any, Any],
+) -> str:
+    key = func_keymaker(func, algo, keyspace)
+    if not keymaker:
+        return key
+    return f"{key}:{keymaker(*args, **kwargs)}"
+
+
+class TaskQueue(Protocol, Generic[QueueItem]):
+    def put(self, item: QueueItem) -> None: ...
+    def get(self, block: bool = True, *, timeout: float = 0) -> QueueItem: ...
+    def qsize(self) -> int: ...
+    def empty(self) -> bool: ...
+    def full(self) -> bool: ...
+    @property
+    @abstractmethod
+    def capacity(self) -> int: ...
+
+
+class AsyncTaskQueue(Protocol, Generic[QueueItem]):
+    async def put(self, item: QueueItem) -> None: ...
+    async def get(self, block: bool = True, *, timeout: float = 0) -> QueueItem: ...
+    async def qsize(self) -> int: ...
+    async def empty(self) -> bool: ...
+    async def full(self) -> bool: ...
+    @property
+    @abstractmethod
+    def capacity(self) -> int: ...
+
+
+class SyncFunc(Protocol[P, R]):
+    __name__: str
+
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
+
+
+class AsyncFunc(Protocol[P, R]):
+    __name__: str
+
+    async def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
 
 
 class ScriptFunc(Protocol, Generic[KeysT, ArgsT, ResultT]):
@@ -154,7 +206,11 @@ class ThrottleHandler(ABC):
         pass
 
     @abstractmethod
-    def clear(self, keyspace: str = "") -> None:
+    def clear(self, keyspace: str) -> None:
+        pass
+
+    @abstractmethod
+    def close(self) -> None:
         pass
 
     def dispatch(self, algo: ThrottleAlgo):
@@ -187,15 +243,18 @@ class AsyncThrottleHandler(ABC):
     @abstractmethod
     async def leaky_bucket(
         self, key: str, bucket_size: int, quota: int, duration: int
-    ) -> TaskScheduler:
-        pass
+    ) -> TaskScheduler: ...
 
     @abstractmethod
     async def clear(self, keyspace: str = "") -> None:
         pass
 
+    @abstractmethod
+    async def close(self) -> None:
+        pass
+
     def dispatch(self, algo: ThrottleAlgo):
-        "does not handle leaky bucket case"
+        "does not handle the leaky bucket case"
         match algo:
             case ThrottleAlgo.FIXED_WINDOW:
                 return self.fixed_window

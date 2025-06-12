@@ -1,4 +1,3 @@
-# import asyncio
 import typing as ty
 
 from premier.throttler.interface import Duration, KeyMaker, R, ThrottleAlgo
@@ -49,14 +48,15 @@ def throttled(
     )
     algo = algo or throttler.default_algo
     if algo is ThrottleAlgo.LEAKY_BUCKET:
-        assert bucket_size
-        return throttler.leaky_bucket(
+        if bucket_size is None:
+            raise ArgumentMissingError("bucket_size must be specified for LEAKY_BUCKET")
+        return throttler.throttle(
             quota=quota,
-            duration_s=duration,
+            duration=duration,
+            throttle_algo=algo,
             keymaker=keymaker,
             bucket_size=bucket_size,
         )
-
     return throttler.throttle(
         quota=quota,
         duration=duration,
@@ -95,9 +95,10 @@ def token_bucket(quota: int, duration_s: int, keymaker: KeyMaker | None = None):
 def leaky_bucket(
     bucket_size: int, quota: int, duration_s: int, keymaker: KeyMaker | None = None
 ):
-    return throttler.leaky_bucket(
+    return throttler.throttle(
         bucket_size=bucket_size,
         quota=quota,
-        duration_s=duration_s,
+        throttle_algo=ThrottleAlgo.LEAKY_BUCKET,
+        duration=duration_s,
         keymaker=keymaker,
     )

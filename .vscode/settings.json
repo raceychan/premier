@@ -1,7 +1,0 @@
-{
-    "Lua.diagnostics.globals": [
-        "ARGV",
-        "KEYS",
-        "redis"
-    ]
-}

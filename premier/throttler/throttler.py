@@ -1,37 +1,33 @@
-import threading
-import typing as ty
+import inspect
 from functools import wraps
-from typing import Callable
+from typing import Any, Callable, Literal, cast, overload
 
-from premier.throttler.handlers import (
-    DefaultHandler,
-    QuotaExceedsError,
-    ThrottleHandler,
-)
+from premier.throttler.errors import QuotaExceedsError, UninitializedHandlerError
+from premier.throttler.handler import DefaultHandler, ThrottleHandler
 from premier.throttler.interface import (
+    AsyncFunc,
+    AsyncThrottleHandler,
     KeyMaker,
-    LBThrottleInfo,
     P,
     R,
+    SyncFunc,
     ThrottleAlgo,
-    ThrottleInfo,
+    make_key,
 )
 
 AnyFunc = Callable[P, R]
 
 
-class _Throttler:
+class Throttler:
     """
     This is a singleton, we might want to create sub instances
     with different configs
     """
 
-    # _counter: QuotaCounter[ty.Hashable, ty.Any]
     _handler: ThrottleHandler
-    _aiohanlder: ty.Any
+    _aiohanlder: Any
     _keyspace: str
     _algo: ThrottleAlgo
-    _lock: threading.Lock
 
     def __init__(self):
         self.__ready = False
@@ -46,51 +42,55 @@ class _Throttler:
 
     def config(
         self,
-        handler: ThrottleHandler,
+        handler: ThrottleHandler | None = None,
         *,
-        lock: threading.Lock = threading.Lock(),
+        aiohandler: AsyncThrottleHandler | None = None,
         algo: ThrottleAlgo = ThrottleAlgo.FIXED_WINDOW,
         keyspace: str = "premier",
     ):
-        self._handler = handler
-        self._lock = lock
+        self._handler = handler or DefaultHandler()
+        self._aiohandler = aiohandler
         self._algo = algo
         self._keyspace = keyspace
         self.__ready = True
         return self
 
-    def clear(self):
+    def clear(self, keyspace: str | None = None):
         if not self._handler:
             return
-        self._handler.clear(self._keyspace)
+        if keyspace is None:
+            keyspace = self._keyspace
+        self._handler.clear(keyspace)
 
-    def leaky_bucket(
+    async def aclear(self, keyspace: str | None = None):
+        if not self._aiohandler:
+            return
+        if keyspace is None:
+            keyspace = self._keyspace
+        await self._aiohandler.clear(keyspace)
+
+    @overload
+    def throttle(
         self,
-        bucket_size: int,
+        throttle_algo: (
+            Literal[ThrottleAlgo.FIXED_WINDOW]
+            | Literal[ThrottleAlgo.SLIDING_WINDOW]
+            | Literal[ThrottleAlgo.TOKEN_BUCKET]
+        ),
         quota: int,
-        duration_s: int,
-        *,
+        duration: int,
         keymaker: KeyMaker | None = None,
-    ) -> ty.Callable[[ty.Callable[..., None]], ty.Callable[..., None]]:
-        def wrapper(func: AnyFunc[P, None]):
-            info = LBThrottleInfo(
-                func=func,
-                algo=ThrottleAlgo.LEAKY_BUCKET,
-                keyspace=self._keyspace,
-                bucket_size=bucket_size,
-            )
+    ) -> Callable[[SyncFunc[P, R]], SyncFunc[P, R]]: ...
 
-            @wraps(func)
-            def inner(*args: P.args, **kwargs: P.kwargs) -> None:
-                key = info.make_key(keymaker, args, kwargs)
-                schedule_task = self._handler.leaky_bucket(
-                    key, bucket_size, quota, duration_s
-                )
-                return schedule_task(func, *args, **kwargs)  # type: ignore
-
-            return inner
-
-        return wrapper
+    @overload
+    def throttle(
+        self,
+        throttle_algo: Literal[ThrottleAlgo.LEAKY_BUCKET],
+        quota: int,
+        duration: int,
+        keymaker: KeyMaker | None = None,
+        bucket_size: int = -1,
+    ) -> Callable[[SyncFunc[P, R]], SyncFunc[P, R]]: ...
 
     def throttle(
         self,
@@ -98,28 +98,135 @@ class _Throttler:
         quota: int,
         duration: int,
         keymaker: KeyMaker | None = None,
-    ) -> ty.Callable[[ty.Callable[..., R]], ty.Callable[..., R]]:
-        def wrapper(func: AnyFunc[P, R]) -> AnyFunc[P, R]:
-            info = ThrottleInfo(
-                func=func,
-                keyspace=self._keyspace,
-                algo=throttle_algo,
-            )
+        bucket_size: int = -1,
+    ) -> (
+        Callable[[Callable[..., R]], Callable[..., R]]
+        | Callable[[Callable[..., None]], Callable[..., None]]
+    ):
 
-            @wraps(func)
-            def inner(*args: P.args, **kwargs: P.kwargs) -> R:
-                key = info.make_key(keymaker, args, kwargs)
-                countdown = self._handler.dispatch(info.algo)(
-                    key, quota=quota, duration=duration
-                )
-                if countdown != -1:
-                    raise QuotaExceedsError(quota, duration, countdown)
-                res = func(*args, **kwargs)
-                return res
+        @overload
+        def wrapper(func: SyncFunc[P, R]) -> SyncFunc[P, R]: ...
 
-            return inner
+        @overload
+        def wrapper(func: AsyncFunc[P, R]) -> AsyncFunc[P, R]: ...
+
+        def wrapper(
+            func: SyncFunc[P, R] | AsyncFunc[P, R],
+        ) -> SyncFunc[P, R] | AsyncFunc[P, R]:
+            if not inspect.iscoroutinefunction(func):
+                func = cast(SyncFunc[P, R], func)
+
+                @wraps(func)
+                def inner(*args: P.args, **kwargs: P.kwargs) -> R | None:
+                    key = make_key(
+                        func,
+                        algo=throttle_algo,
+                        keyspace=self._keyspace,
+                        args=args,
+                        kwargs=kwargs,
+                        keymaker=keymaker,
+                    )
+                    if throttle_algo is ThrottleAlgo.LEAKY_BUCKET:
+                        scheduler = self._handler.leaky_bucket(
+                            key, bucket_size=bucket_size, quota=quota, duration=duration
+                        )
+                        return scheduler(func, *args, **kwargs)
+                    countdown = self._handler.dispatch(throttle_algo)(
+                        key, quota=quota, duration=duration
+                    )
+                    if countdown != -1:
+                        raise QuotaExceedsError(quota, duration, countdown)
+                    return func(*args, **kwargs)
+
+                return inner
+            else:
+                func = cast(AsyncFunc[P, R], func)
+
+                @wraps(func)
+                async def ainner(*args: P.args, **kwargs: P.kwargs) -> R | None:
+                    if not self._aiohandler:
+                        raise UninitializedHandlerError("Async handler not configured")
+                    key = make_key(
+                        func,
+                        algo=throttle_algo,
+                        keyspace=self._keyspace,
+                        args=args,
+                        kwargs=kwargs,
+                        keymaker=keymaker,
+                    )
+                    if throttle_algo is ThrottleAlgo.LEAKY_BUCKET:
+                        scheduler = self._aiohandler.leaky_bucket(
+                            key, bucket_size=bucket_size, quota=quota, duration=duration
+                        )
+                        return await scheduler(func, *args, **kwargs)
+                    countdown = await self._aiohandler.dispatch(throttle_algo)(
+                        key, quota=quota, duration=duration
+                    )
+                    if countdown != -1:
+                        raise QuotaExceedsError(quota, duration, countdown)
+                    return await func(*args, **kwargs)
+
+                return ainner
 
         return wrapper
 
+    def fixed_window(self, quota: int, duration: int, keymaker: KeyMaker | None = None):
+        return self.throttle(
+            quota=quota,
+            duration=duration,
+            keymaker=keymaker,
+            throttle_algo=ThrottleAlgo.FIXED_WINDOW,
+        )
 
-throttler = _Throttler().config(DefaultHandler(dict()))
+    def sliding_window(
+        self, quota: int, duration: int, keymaker: KeyMaker | None = None
+    ):
+        return self.throttle(
+            quota=quota,
+            duration=duration,
+            keymaker=keymaker,
+            throttle_algo=ThrottleAlgo.SLIDING_WINDOW,
+        )
+
+    def token_bucket(self, quota: int, duration: int, keymaker: KeyMaker | None = None):
+        return self.throttle(
+            quota=quota,
+            duration=duration,
+            keymaker=keymaker,
+            throttle_algo=ThrottleAlgo.TOKEN_BUCKET,
+        )
+
+    def leaky_bucket(
+        self,
+        quota: int,
+        bucket_size: int,
+        duration: int,
+        keymaker: KeyMaker | None = None,
+    ):
+        return self.throttle(
+            bucket_size=bucket_size,
+            quota=quota,
+            duration=duration,
+            keymaker=keymaker,
+            throttle_algo=ThrottleAlgo.LEAKY_BUCKET,
+        )
+
+    async def get_countdown(
+        self,
+        throttle_algo: ThrottleAlgo,
+        quota: int,
+        duration: int,
+        key: str | None = None,
+    ):
+        key = key or f"{self._keyspace}:"
+        if not self._aiohandler:
+            raise UninitializedHandlerError("Async handler not configured")
+        countdown = await self._aiohandler.dispatch(throttle_algo)(
+            key, quota=quota, duration=duration
+        )
+        if countdown == -1:  # func is ready to be executed
+            return
+        raise QuotaExceedsError(quota, duration, countdown)
+
+
+throttler = Throttler().config(DefaultHandler())

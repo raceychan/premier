@@ -45,26 +45,21 @@ async def async_request(client: httpx.AsyncClient, url: str) -> str:
 ```python
 from redis import Redis
 from redis.asyncio.client import Redis as AIORedis
+from premier.providers.redis import AsyncRedisCacheAdapter
 
 REDIS_URL = "redis://@127.0.0.1:6379/0"
-redis = Redis.from_url(REDIS_URL)
-aredis = AIORedis.from_url(REDIS_URL) # only if you need to throttle async functions
+aredis = AsyncRedisCacheAdapter(AIORedis.from_url(REDIS_URL)) 
 
-throttler.config(
-    handler = RedisHandler(redis=redis),
-    aiohandler = AsyncRedisHandler(aredis), # only if you need to throttle async functions
+throttler = Throttler(
+    handler = AsyncRedisHandler(aredis), # only if you need to throttle async functions
     algo=ThrottleAlgo.FIXED_WINDOW, # use fix window as the default throttling algorithm
-    keyspace="premier", # set premier as the keyspace
+    keyspace="premier:throttler", # set premier as the keyspace
 )
 ```
 
-- use in fastapi
+- use in lihil
 
-```python
-@app.get("/", dependencies=[Depends(throttler.get_countdown)])
-async def index():
-    return {"msg": "Hello World"}
-```
+checkout [lihil-plugins](https://www.lihil.cc/docs/advance/plugin) for details
 
 ## Install
 
@@ -128,4 +123,4 @@ def add(a: int, b: int) -> int:
 
 - [x] implement timeout feature
 - [x] implement retry feature
-- [ ] implement cache feature
+- [x] implement cache feature

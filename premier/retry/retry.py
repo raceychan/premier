@@ -1,7 +1,7 @@
 import asyncio
 import functools
 from collections.abc import Callable
-from typing import  Awaitable, TypeVar, Union
+from typing import Awaitable, TypeVar, Union
 
 from typing_extensions import assert_never
 
@@ -14,7 +14,7 @@ N = float | int
 WaitStrategy = Union[N, list[N], Callable[[int], N]]
 
 
-def wait_time_calculator_factory(wait: WaitStrategy) -> Callable[[int], float]:
+def _wait_time_calculator_factory(wait: WaitStrategy) -> Callable[[int], float]:
     match wait:
         case int():
 
@@ -60,7 +60,7 @@ def retry(
               or callable (function of attempt number)
         exceptions: Tuple of exception types to retry on
     """
-    get_wait_time = wait_time_calculator_factory(wait)
+    get_wait_time = _wait_time_calculator_factory(wait)
 
     def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         @functools.wraps(func)

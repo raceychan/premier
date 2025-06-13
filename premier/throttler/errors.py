@@ -16,13 +16,3 @@ class QuotaExceedsError(PremierError):
         msg = f"You exceeds {quota} quota in {duration_s} seconds, available after {time_remains:.2f} s"
         self.time_remains = time_remains
         super().__init__(msg)
-
-
-class QueueFullError(PremierError):
-    def __init__(self, msg: str = ""):
-        self.msg = msg
-
-
-class BucketFullError(QuotaExceedsError):
-    def __init__(self, msg: str):
-        self.msg = msg

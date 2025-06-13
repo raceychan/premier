@@ -1,10 +1,8 @@
 import json
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 try:
     from redis.asyncio.client import Redis as AIORedis
-
-    T = TypeVar("T")
 
     class AsyncRedisCache:
         def __init__(self, redis: AIORedis, decoder=json.loads, encoder=json.dumps):
@@ -41,80 +39,6 @@ try:
 
         async def exists(self, key: str) -> bool:
             return bool(await self._redis.exists(key))
-
-        async def close(self) -> None:
-            await self._redis.aclose()
-
-        async def eval_script(self, script_name: str, keys: list[str], args: list[str]) -> float:
-            """Execute a Lua script by name with given keys and arguments."""
-            import pathlib
-            script_dir = pathlib.Path(__file__).parent.parent / "throttler" / "lua"
-            script_path = script_dir / f"{script_name}.lua"
-            
-            with open(script_path, 'r') as f:
-                script_content = f.read()
-            
-            result = await self._redis.eval(script_content, len(keys), *keys, *args)
-            return float(result)
-
-        async def register_script(self, script_content: str) -> str:
-            """Register a Lua script and return its SHA hash."""
-            script = self._redis.register_script(script_content)
-            return script.sha
-
-    class AsyncRedisQueueAdapter(Generic[T]):
-        def __init__(
-            self,
-            redis: AIORedis,
-            name: str,
-            maxsize: int,
-            encoder=json.dumps,
-            decoder=json.loads,
-        ):
-            self._redis = redis
-            self._name = name
-            self._maxsize = maxsize
-            self._encoder = encoder
-            self._decoder = decoder
-
-        async def put(self, item: T) -> None:
-            current_size = await self._redis.llen(self._name)
-            if current_size >= self._maxsize:
-                from premier.throttler.errors import QueueFullError
-
-                raise QueueFullError("Queue is full. Cannot add more items.")
-
-            serialized = self._encoder(item)
-            await self._redis.lpush(self._name, serialized)
-
-        async def get(self, block: bool = True, *, timeout: float = 0) -> T | None:
-            if block:
-                result = await self._redis.brpop([self._name], timeout=timeout)
-                if result is None:
-                    return None
-                _, item_bytes = result
-            else:
-                item_bytes = await self._redis.rpop(self._name)
-                if item_bytes is None:
-                    return None
-
-            return self._decoder(item_bytes)
-
-        async def qsize(self) -> int:
-            return await self._redis.llen(self._name)
-
-        async def empty(self) -> bool:
-            return await self.qsize() == 0
-
-        async def full(self) -> bool:
-            return await self.qsize() >= self._maxsize
-
-        @property
-        def capacity(self) -> int:
-            return self._maxsize
-
-        async def clear(self) -> None:
-            await self._redis.delete(self._name)
 
         async def close(self) -> None:
             await self._redis.aclose()

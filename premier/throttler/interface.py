@@ -32,10 +32,7 @@ AsyncTaskScheduler = Callable[..., Awaitable[None]]
 T = TypeVar("T")
 P = ParamSpec("P")
 R = TypeVar("R", covariant=True)
-QueueItem = TypeVar("QueueItem")
-
-
-def func_keymaker(func: Callable[..., Any], algo: "ThrottleAlgo", keyspace: str):
+def _func_keymaker(func: Callable[..., Any], algo: "ThrottleAlgo", keyspace: str):
     if isinstance(func, MethodType):
         # It's a method, get its class name and method name
         class_name = func.__self__.__class__.__name__
@@ -53,7 +50,7 @@ def func_keymaker(func: Callable[..., Any], algo: "ThrottleAlgo", keyspace: str)
     return f"{keyspace}:{algo.value}:{func.__module__}:{fid}"
 
 
-def make_key(
+def _make_key(
     func: Callable[..., Any],
     algo: "ThrottleAlgo",
     keyspace: str,
@@ -61,23 +58,10 @@ def make_key(
     args: tuple[object, ...],
     kwargs: dict[Any, Any],
 ) -> str:
-    key = func_keymaker(func, algo, keyspace)
+    key = _func_keymaker(func, algo, keyspace)
     if not keymaker:
         return key
     return f"{key}:{keymaker(*args, **kwargs)}"
-
-
-
-
-class AsyncTaskQueue(Protocol, Generic[QueueItem]):
-    async def put(self, item: QueueItem) -> None: ...
-    async def get(self, block: bool = True, *, timeout: float = 0) -> QueueItem: ...
-    async def qsize(self) -> int: ...
-    async def empty(self) -> bool: ...
-    async def full(self) -> bool: ...
-    @property
-    @abstractmethod
-    def capacity(self) -> int: ...
 
 
 
@@ -107,7 +91,7 @@ class ThrottleInfo:
 
     @property
     def funckey(self):
-        return func_keymaker(self.func, self.algo, self.keyspace)
+        return _func_keymaker(self.func, self.algo, self.keyspace)
 
     def make_key(
         self,

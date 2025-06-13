@@ -3,7 +3,7 @@ import logging
 
 import pytest as pytest
 
-from premier import BucketFullError, Throttler
+from premier import QuotaExceedsError, Throttler
 
 
 async def test_async_throttler_with_leaky_bucket(
@@ -34,7 +34,7 @@ async def test_async_throttler_with_leaky_bucket(
     for e in done:
         try:
             e.result()
-        except BucketFullError:
+        except QuotaExceedsError:
             rejected += 1
 
     # In leaky bucket: bucket_size allows immediate tasks, quota determines rate

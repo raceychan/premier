@@ -2,14 +2,14 @@ import time
 
 from premier._logs import logger as logger
 from premier.providers import AsyncCacheProvider
-from premier.throttler.errors import BucketFullError
+from premier.throttler.errors import QuotaExceedsError
 from premier.throttler.interface import (
     AsyncThrottleHandler,
     CountDown,
 )
 
 
-class Timer:
+class _Timer:
     def __init__(self, timer_func=time.perf_counter):
         self._timer_func = timer_func
 
@@ -18,9 +18,9 @@ class Timer:
 
 
 class AsyncDefaultHandler(AsyncThrottleHandler):
-    def __init__(self, cache: AsyncCacheProvider, timer: Timer | None = None):
+    def __init__(self, cache: AsyncCacheProvider, timer: _Timer | None = None):
         self._cache = cache
-        self._timer = timer or Timer()
+        self._timer = timer or _Timer()
 
     async def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
         cached_value = await self._cache.get(key)
@@ -116,7 +116,7 @@ class AsyncDefaultHandler(AsyncThrottleHandler):
         
         # Check if bucket is full
         if current_count >= bucket_size:
-            raise BucketFullError("Bucket is full. Cannot add more tasks.")
+            raise QuotaExceedsError(bucket_size, duration, duration / leak_rate)
         
         # Calculate delay until next token can be processed
         if current_count == 0:
@@ -156,44 +156,6 @@ try:
             cache = AsyncRedisCache(redis)
             return cls(cache)
 
-        async def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
-            """Redis Lua script implementation of fixed window algorithm."""
-            return await self._cache.eval_script(
-                "fixed_window", 
-                keys=[key], 
-                args=[str(quota), str(duration)]
-            )
-
-        async def sliding_window(self, key: str, quota: int, duration: int) -> CountDown:
-            """Redis Lua script implementation of sliding window algorithm."""
-            return await self._cache.eval_script(
-                "sliding_window", 
-                keys=[key], 
-                args=[str(quota), str(duration)]
-            )
-
-        async def token_bucket(self, key: str, quota: int, duration: int) -> CountDown:
-            """Redis Lua script implementation of token bucket algorithm."""
-            return await self._cache.eval_script(
-                "token_bucket", 
-                keys=[key], 
-                args=[str(quota), str(duration)]
-            )
-
-        async def leaky_bucket(self, key: str, bucket_size: int, quota: int, duration: int) -> CountDown:
-            """Redis Lua script implementation of leaky bucket algorithm."""
-            bucket_key = f"{key}:bucket"
-            result = await self._cache.eval_script(
-                "leaky_bucket", 
-                keys=[bucket_key], 
-                args=[str(bucket_size), str(quota), str(duration)]
-            )
-            
-            # Handle bucket full error code from Lua script
-            if result == -999:
-                raise BucketFullError("Bucket is full. Cannot add more tasks.")
-            
-            return result
 
         async def close(self) -> None:
             await super().close()

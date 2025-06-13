@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from premier import BucketFullError, QuotaExceedsError, Throttler
+from premier import QuotaExceedsError, Throttler
 from premier.throttler import handler
 
 
@@ -186,7 +186,7 @@ async def test_throttler_with_leaky_bucket(aiothrottler: Throttler):
     for e in done:
         try:
             e.result()
-        except BucketFullError:
+        except QuotaExceedsError:
             rejected += 1
 
     # In leaky bucket: bucket_size allows immediate tasks, quota determines rate

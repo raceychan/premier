@@ -3,11 +3,20 @@ from contextlib import contextmanager
 from functools import wraps
 from inspect import iscoroutinefunction
 from time import perf_counter
-from typing import Any, Awaitable, Callable, Optional, cast, overload
+from typing import Any, Awaitable, Callable, Optional, Protocol, cast, overload
 
 from premier.interface import FlexDecor, P, R
 
-from .interface import ILogger, ValidLogger
+
+class ILogger(Protocol):
+    def exception(self, msg: str): ...
+
+    def info(self, msg: str): ...
+
+
+CustomLogger = Callable[[float], None]
+
+ValidLogger = ILogger | CustomLogger
 
 
 def timeit(

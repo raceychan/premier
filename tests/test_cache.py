@@ -3,7 +3,7 @@ import pytest
 import time
 from unittest.mock import AsyncMock
 
-from premier.cache.cache import Cache, make_cache_key
+from premier.cache import Cache, _make_cache_key
 from premier.providers.memory import AsyncInMemoryCache
 
 
@@ -29,7 +29,7 @@ class TestMakeCacheKey:
         def test_func(a, b, c=1):
             return a + b + c
         
-        key = make_cache_key(
+        key = _make_cache_key(
             func=test_func,
             keyspace="test",
             args=(1, 2),
@@ -42,7 +42,7 @@ class TestMakeCacheKey:
         def test_func():
             pass
         
-        key = make_cache_key(
+        key = _make_cache_key(
             func=test_func,
             keyspace="test",
             args=(),
@@ -58,7 +58,7 @@ class TestMakeCacheKey:
         def key_maker(user_id, action):
             return f"user:{user_id}:action:{action}"
         
-        key = make_cache_key(
+        key = _make_cache_key(
             func=test_func,
             keyspace="test",
             args=(123, "login"),
@@ -71,7 +71,7 @@ class TestMakeCacheKey:
         def test_func():
             pass
         
-        key = make_cache_key(
+        key = _make_cache_key(
             func=test_func,
             keyspace="",
             args=(),

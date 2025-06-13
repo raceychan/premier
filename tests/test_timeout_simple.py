@@ -2,7 +2,7 @@ import asyncio
 import pytest
 from unittest.mock import Mock
 
-from premier.timer.timer import timeout
+from premier.timer import timeout
 
 
 @pytest.mark.asyncio

@@ -3,8 +3,8 @@ from types import FunctionType, MethodType
 from typing import Any, Dict
 
 from premier.throttler.interface import (
-    func_keymaker,
-    make_key,
+    _func_keymaker,
+    _make_key,
     ThrottleAlgo,
     ThrottleInfo,
     LBThrottleInfo,
@@ -15,16 +15,16 @@ from premier.throttler.interface import (
 
 class TestFuncKeymaker:
     def test_function_keymaker(self):
-        """Test func_keymaker with regular function"""
+        """Test _func_keymaker with regular function"""
         def test_func():
             pass
         
-        result = func_keymaker(test_func, ThrottleAlgo.FIXED_WINDOW, "test_keyspace")
+        result = _func_keymaker(test_func, ThrottleAlgo.FIXED_WINDOW, "test_keyspace")
         expected = f"test_keyspace:fixed_window:{test_func.__module__}:test_func"
         assert result == expected
         
     def test_method_keymaker(self):
-        """Test func_keymaker with method"""
+        """Test _func_keymaker with method"""
         class TestClass:
             def test_method(self):
                 pass
@@ -32,12 +32,12 @@ class TestFuncKeymaker:
         instance = TestClass()
         method = instance.test_method
         
-        result = func_keymaker(method, ThrottleAlgo.TOKEN_BUCKET, "test_keyspace")
+        result = _func_keymaker(method, ThrottleAlgo.TOKEN_BUCKET, "test_keyspace")
         expected = f"test_keyspace:token_bucket:{method.__module__}:TestClass:test_method"
         assert result == expected
         
     def test_callable_without_name(self):
-        """Test func_keymaker with callable without __name__"""
+        """Test _func_keymaker with callable without __name__"""
         class CallableWithoutName:
             def __call__(self):
                 pass
@@ -47,12 +47,12 @@ class TestFuncKeymaker:
         if hasattr(callable_obj, '__name__'):
             delattr(callable_obj, '__name__')
             
-        result = func_keymaker(callable_obj, ThrottleAlgo.LEAKY_BUCKET, "test_keyspace")
+        result = _func_keymaker(callable_obj, ThrottleAlgo.LEAKY_BUCKET, "test_keyspace")
         expected = f"test_keyspace:leaky_bucket:{callable_obj.__module__}:"
         assert result == expected
         
     def test_callable_with_name(self):
-        """Test func_keymaker with callable that has __name__"""
+        """Test _func_keymaker with callable that has __name__"""
         class CallableWithName:
             __name__ = "custom_callable"
             
@@ -61,18 +61,18 @@ class TestFuncKeymaker:
                 
         callable_obj = CallableWithName()
         
-        result = func_keymaker(callable_obj, ThrottleAlgo.SLIDING_WINDOW, "test_keyspace")
+        result = _func_keymaker(callable_obj, ThrottleAlgo.SLIDING_WINDOW, "test_keyspace")
         expected = f"test_keyspace:sliding_window:{callable_obj.__module__}:custom_callable"
         assert result == expected
 
 
 class TestMakeKey:
-    def test_make_key_without_keymaker(self):
-        """Test make_key without custom keymaker"""
+    def test__make_key_without_keymaker(self):
+        """Test _make_key without custom keymaker"""
         def test_func():
             pass
             
-        result = make_key(
+        result = _make_key(
             test_func,
             ThrottleAlgo.FIXED_WINDOW,
             "test_keyspace",
@@ -81,18 +81,18 @@ class TestMakeKey:
             {"key": "value"}
         )
         
-        expected = func_keymaker(test_func, ThrottleAlgo.FIXED_WINDOW, "test_keyspace")
+        expected = _func_keymaker(test_func, ThrottleAlgo.FIXED_WINDOW, "test_keyspace")
         assert result == expected
         
-    def test_make_key_with_keymaker(self):
-        """Test make_key with custom keymaker"""
+    def test__make_key_with_keymaker(self):
+        """Test _make_key with custom keymaker"""
         def test_func():
             pass
             
         def custom_keymaker(a, b, key=None):
             return f"{a}_{b}_{key}"
             
-        result = make_key(
+        result = _make_key(
             test_func,
             ThrottleAlgo.TOKEN_BUCKET,
             "test_keyspace",
@@ -101,7 +101,7 @@ class TestMakeKey:
             {"key": "value"}
         )
         
-        base_key = func_keymaker(test_func, ThrottleAlgo.TOKEN_BUCKET, "test_keyspace")
+        base_key = _func_keymaker(test_func, ThrottleAlgo.TOKEN_BUCKET, "test_keyspace")
         expected = f"{base_key}:1_2_value"
         assert result == expected
 
@@ -133,11 +133,11 @@ class TestThrottleInfo:
             algo=ThrottleAlgo.SLIDING_WINDOW
         )
         
-        expected = func_keymaker(test_func, ThrottleAlgo.SLIDING_WINDOW, "test_keyspace")
+        expected = _func_keymaker(test_func, ThrottleAlgo.SLIDING_WINDOW, "test_keyspace")
         assert info.funckey == expected
         
-    def test_throttle_info_make_key_without_keymaker(self):
-        """Test ThrottleInfo make_key without keymaker"""
+    def test_throttle_info__make_key_without_keymaker(self):
+        """Test ThrottleInfo _make_key without keymaker"""
         def test_func():
             pass
             
@@ -150,8 +150,8 @@ class TestThrottleInfo:
         result = info.make_key(None, (1, 2), {"key": "value"})
         assert result == info.funckey
         
-    def test_throttle_info_make_key_with_keymaker(self):
-        """Test ThrottleInfo make_key with keymaker"""
+    def test_throttle_info__make_key_with_keymaker(self):
+        """Test ThrottleInfo _make_key with keymaker"""
         def test_func():
             pass
             
@@ -200,10 +200,10 @@ class TestLBThrottleInfo:
         )
         
         # Should have funckey property from parent
-        expected = func_keymaker(test_func, ThrottleAlgo.LEAKY_BUCKET, "test_keyspace")
+        expected = _func_keymaker(test_func, ThrottleAlgo.LEAKY_BUCKET, "test_keyspace")
         assert info.funckey == expected
         
-        # Should have make_key method from parent
+        # Should have _make_key method from parent
         def custom_keymaker(x):
             return str(x)
             
@@ -336,31 +336,6 @@ class TestProtocols:
             
         asyncio.run(run_test())
         
-    def test_async_task_queue_protocol_methods_original(self):
-        """Test original async TaskQueue protocol method signatures"""
-        from premier.throttler.interface import AsyncTaskQueue
-        
-        # This is mainly a type checking test
-        # The actual implementation would be tested in concrete classes
-        assert hasattr(AsyncTaskQueue, 'put')
-        assert hasattr(AsyncTaskQueue, 'get')
-        assert hasattr(AsyncTaskQueue, 'qsize')
-        assert hasattr(AsyncTaskQueue, 'empty')
-        assert hasattr(AsyncTaskQueue, 'full')
-        assert hasattr(AsyncTaskQueue, 'capacity')
-        
-    def test_async_task_queue_protocol_methods(self):
-        """Test AsyncTaskQueue protocol method signatures"""
-        from premier.throttler.interface import AsyncTaskQueue
-        
-        # This is mainly a type checking test
-        # The actual implementation would be tested in concrete classes
-        assert hasattr(AsyncTaskQueue, 'put')
-        assert hasattr(AsyncTaskQueue, 'get')
-        assert hasattr(AsyncTaskQueue, 'qsize')
-        assert hasattr(AsyncTaskQueue, 'empty')
-        assert hasattr(AsyncTaskQueue, 'full')
-        assert hasattr(AsyncTaskQueue, 'capacity')
 
 
 class TestThrottleHandlerDispatch:

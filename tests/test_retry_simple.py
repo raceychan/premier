@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from premier.retry.retry import retry
+from premier.retry import retry
 
 
 class CustomException(Exception):

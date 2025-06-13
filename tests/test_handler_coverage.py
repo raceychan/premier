@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from premier.throttler.errors import BucketFullError
+from premier.throttler.errors import QuotaExceedsError
 from premier.throttler.handler import AsyncDefaultHandler
 
 
@@ -153,7 +153,7 @@ class TestAsyncDefaultHandler:
 
     @pytest.mark.asyncio
     async def test_leaky_bucket_bucket_full_error(self):
-        """Test leaky bucket raises BucketFullError when bucket is full"""
+        """Test leaky bucket raises QuotaExceedsError when bucket is full"""
         mock_timer = Mock(return_value=100.0)
         from premier.providers import AsyncInMemoryCache
         
@@ -167,8 +167,8 @@ class TestAsyncDefaultHandler:
             else:
                 assert result >= 0  # Subsequent requests have delay
 
-        # Next call should raise BucketFullError
-        with pytest.raises(BucketFullError):
+        # Next call should raise QuotaExceedsError
+        with pytest.raises(QuotaExceedsError):
             await handler.leaky_bucket("test_key", bucket_size=3, quota=1, duration=1)
 
     @pytest.mark.asyncio
@@ -337,7 +337,7 @@ class TestRedisHandlers:
             # Test leaky bucket bucket full error
             mock_redis.evalsha = Mock(return_value=-999)  # Bucket full error code
             
-            with pytest.raises(BucketFullError):
+            with pytest.raises(QuotaExceedsError):
                 await handler.leaky_bucket("test_key", 3, 5, 10)
 
         except ImportError:

@@ -1,10 +1,7 @@
-from premier.providers.interace import AsyncCacheProvider, AsyncQueueProvider
-from premier.providers.memory import AsyncInMemoryCache, AsyncInMemoryQueue
+from premier.providers.interace import AsyncCacheProvider
+from premier.providers.memory import AsyncInMemoryCache
 
-# Export main async-only interfaces
 __all__ = [
     "AsyncCacheProvider",
-    "AsyncQueueProvider",
     "AsyncInMemoryCache",
-    "AsyncInMemoryQueue",
 ]

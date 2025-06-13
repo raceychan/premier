@@ -9,7 +9,7 @@ R = TypeVar("R")
 KeyMaker = Callable[..., str]
 
 
-def make_cache_key(
+def _make_cache_key(
     func: Callable,
     keyspace: str,
     args: tuple,
@@ -58,41 +58,41 @@ class Cache:
     ) -> Callable[[Callable[P, R]], Callable[P, Awaitable[R | None]]]:
         """
         Cache decorator
-        
+
         Args:
             expire_s: TTL in seconds (None means no expiration)
             cache_key: Either a string key or function that generates key from args/kwargs
             encoder: Function to encode the result before caching (optional)
         """
-        
+
         def wrapper(func: Callable[P, R]) -> Callable[P, Awaitable[R | None]]:
             @wraps(func)
             async def ainner(*args: P.args, **kwargs: P.kwargs) -> R | None:
-                
+
                 # Generate cache key
-                key = make_cache_key(
+                key = _make_cache_key(
                     func=func,
                     keyspace=self._keyspace,
                     args=args,
                     kwargs=kwargs,
                     cache_key=cache_key,
                 )
-                
+
                 # Try to get from cache first
                 cached_data = await self._cache_provider.get(key)
                 if cached_data is not None:
                     # Cache hit - return the cached value
                     return cached_data
-                
+
                 # Cache miss, execute function
                 if inspect.iscoroutinefunction(func):
                     result = await func(*args, **kwargs)
                 else:
                     result = func(*args, **kwargs)
-                
+
                 # Encode result if encoder provided
                 cache_value = encoder(result) if encoder else result
-                
+
                 # Store in cache with TTL
                 await self._cache_provider.set(key, cache_value, ex=expire_s)
                 return result
@@ -100,8 +100,3 @@ class Cache:
             return ainner
 
         return wrapper
-
-
-# # Create default cache instance
-# from premier.providers import AsyncInMemoryCache
-# cache = Cache(cache_provider=AsyncInMemoryCache())

@@ -12,7 +12,7 @@ from premier.throttler.interface import (
     P,
     R,
     ThrottleAlgo,
-    make_key,
+    _make_key,
 )
 
 
@@ -60,7 +60,7 @@ class Throttler:
             async def ainner(*args: P.args, **kwargs: P.kwargs) -> R | None:
                 if not self._aiohandler:
                     raise UninitializedHandlerError("Async handler not configured")
-                key = make_key(
+                key = _make_key(
                     func,
                     algo=throttle_algo,
                     keyspace=self._keyspace,

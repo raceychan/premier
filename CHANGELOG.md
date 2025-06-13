@@ -126,3 +126,15 @@ Feature
 refactor:
 
 No longer support sync version of decorator, which means all decorated function would be async.
+
+
+### version 0.4.6
+
+- ✅ Implemented facade pattern with Premier class
+- ✅ Added comprehensive logging support with ILogger interface
+- ✅ Enhanced retry logic with detailed logging
+- ✅ Improved timeout handling with logging
+- ✅ Updated documentation and examples
+- ✅ Removed legacy task queue implementation
+- ✅ Made private functions properly private with underscore prefix
+

@@ -4,8 +4,56 @@ A **pluggable API gateway** that transforms any Python web framework into a full
 
 Premier provides a unified, pluggable architecture that makes it easy to add enterprise-grade API gateway functionality to your existing applications with minimal configuration.
 
+## **NEW: Configuration-Driven ASGI Gateway**
+
+Premier now includes a powerful **ASGI Gateway** that lets you configure different API gateway features for different paths through simple configuration files - no code changes required!
+
+```python
+from premier.asgi import create_gateway
+
+config = {
+    "paths": [
+        {
+            "pattern": "/api/users/*",
+            "features": {
+                "rate_limit": {"algorithm": "sliding_window", "quota": 100, "duration": 60},
+                "cache": {"expire_s": 300},
+                "timeout": 10.0,
+                "monitoring": {"log_threshold": 0.1}
+            }
+        },
+        {
+            "pattern": "/api/admin/*", 
+            "features": {
+                "rate_limit": {"algorithm": "token_bucket", "quota": 10, "duration": 60},
+                "retry": {"max_attempts": 3, "wait": 1.0},
+                "timeout": 30.0
+            }
+        }
+    ],
+    "default_features": {
+        "timeout": 5.0,
+        "monitoring": {"log_threshold": 0.5}
+    }
+}
+
+# Create gateway and wrap your ASGI app
+gateway = create_gateway(config, your_asgi_app)
+
+# Deploy with any ASGI server
+# uvicorn main:gateway --host 0.0.0.0 --port 8000
+```
+
+**Key Benefits:**
+- **Path-based configuration** - Different features for different routes
+- **Zero code changes** - Configure through TypedDict configs
+- **Production ready** - Works with any ASGI server (Uvicorn, Hypercorn, etc.)
+- **Regex pattern matching** - Flexible path matching with regex support
+- **Hot reloadable** - Update configurations without restarting
+
 ## Features
 
+- **Configuration-Driven ASGI Gateway** - Path-based feature configuration with zero code changes
 - **Framework Agnostic** - Works with FastAPI, Flask, Django, Starlette, and any Python web framework
 - **Pluggable Architecture** - Modular components that can be mixed and matched
 - **Smart Caching** - Function result caching with TTL support
@@ -19,17 +67,76 @@ Premier provides a unified, pluggable architecture that makes it easy to add ent
 
 ## Quick Start
 
-Transform any web framework into an API gateway in minutes:
+### Option 1: Configuration-Driven ASGI Gateway (Recommended)
+
+Transform any ASGI application into a full-featured API gateway with just configuration:
 
 ```python
-import asyncio
+from premier.asgi import create_gateway, GatewayConfig
 from fastapi import FastAPI
+
+# Your existing application
+app = FastAPI()
+
+@app.get("/api/users/{user_id}")
+async def get_user(user_id: int):
+    return await fetch_user_from_database(user_id)
+
+# Gateway configuration - no code changes needed!
+config: GatewayConfig = {
+    "keyspace": "my-api-gateway",
+    "paths": [
+        {
+            "pattern": "/api/users/*",
+            "features": {
+                "rate_limit": {
+                    "algorithm": "sliding_window",
+                    "quota": 100, 
+                    "duration": 60
+                },
+                "cache": {"expire_s": 300},
+                "timeout": 10.0,
+                "monitoring": {"log_threshold": 0.1}
+            }
+        },
+        {
+            "pattern": "/api/admin/*",
+            "features": {
+                "rate_limit": {
+                    "algorithm": "token_bucket", 
+                    "quota": 10,
+                    "duration": 60
+                },
+                "retry": {"max_attempts": 3, "wait": 1.0},
+                "timeout": 30.0
+            }
+        }
+    ],
+    "default_features": {
+        "timeout": 5.0,
+        "monitoring": {"log_threshold": 0.5}
+    }
+}
+
+# Create the gateway
+gateway = create_gateway(config, app)
+
+# Deploy with any ASGI server
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(gateway, host="0.0.0.0", port=8000)
+```
+
+### Option 2: Decorator-Based Approach
+
+Add gateway features directly to your functions with decorators:
+
+```python
 from premier import Premier
+from fastapi import FastAPI
 
 # Initialize Premier API Gateway
 gateway = Premier()
-
-# Create your web application
 app = FastAPI()
 
 # Add API Gateway features to your endpoints
@@ -40,15 +147,7 @@ app = FastAPI()
 @gateway.timeout(5.0)  # Timeout protection
 @gateway.timeit()  # Monitor performance
 async def get_user(user_id: int):
-    # Your existing business logic
     return await fetch_user_from_database(user_id)
-
-# Gateway middleware for request/response processing
-@app.middleware("http")
-async def gateway_middleware(request, call_next):
-    # Add gateway-level processing here
-    response = await call_next(request)
-    return response
 
 # Cleanup on shutdown
 @app.on_event("shutdown")
@@ -73,23 +172,109 @@ Premier transforms your application into an API gateway through its pluggable ar
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Premier API Gateway                      │
+│                   Premier ASGI Gateway                      │
 ├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
-│  │   Caching   │  │Rate Limiting│  │ Monitoring  │        │
-│  │   Layer     │  │   Layer     │  │   Layer     │        │
-│  └─────────────┘  └─────────────┘  └─────────────┘        │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │           Configuration-Driven Path Router              │  │
+│  │   /api/users/* → [cache, rate_limit, timeout]          │  │
+│  │   /api/admin/* → [retry, rate_limit, monitoring]       │  │
+│  │   /health      → [monitoring]                           │  │
+│  │   default      → [timeout, monitoring]                  │  │
+│  └─────────────────────────────────────────────────────────┘  │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐          │
+│  │   Caching   │  │Rate Limiting│  │ Monitoring  │          │
+│  │   Layer     │  │   Layer     │  │   Layer     │          │
+│  └─────────────┘  └─────────────┘  └─────────────┘          │
 │                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
-│  │   Retry     │  │  Timeout    │  │ Load Balancer│        │
-│  │   Layer     │  │   Layer     │  │   (Future)  │        │
-│  └─────────────┘  └─────────────┘  └─────────────┘        │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────-┐         │
+│  │   Retry     │  │  Timeout    │  │ Load Balancer│         │
+│  │   Layer     │  │   Layer     │  │   (Future)   │         │
+│  └─────────────┘  └─────────────┘  └─────────────-┘         │
 ├─────────────────────────────────────────────────────────────┤
-│              Your Web Framework (FastAPI, Flask, etc.)      │
+│              Your ASGI Application (FastAPI, etc.)          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### ASGI Gateway Flow
+1. **Request arrives** → ASGI Gateway intercepts
+2. **Path matching** → Regex pattern matching finds configuration  
+3. **Feature application** → Configured features applied in order
+4. **Request forwarding** → Clean request sent to your application
+5. **Response processing** → Gateway features applied to response
+
 ## API Gateway Patterns
+
+### Configuration-Driven Patterns (ASGI Gateway)
+
+Configure different gateway behaviors for different paths without changing your application code:
+
+```python
+from premier.asgi import create_gateway, GatewayConfig
+
+config: GatewayConfig = {
+    "keyspace": "production-gateway",
+    "paths": [
+        # High-traffic public API with aggressive caching
+        {
+            "pattern": "/api/public/*",
+            "features": {
+                "rate_limit": {
+                    "algorithm": "fixed_window",
+                    "quota": 1000,
+                    "duration": 3600  # 1000 requests/hour
+                },
+                "cache": {"expire_s": 1800},  # 30min cache
+                "timeout": 5.0,
+                "monitoring": {"log_threshold": 0.1}
+            }
+        },
+        # Admin endpoints with strict limits and retry
+        {
+            "pattern": "/api/admin/*",
+            "features": {
+                "rate_limit": {
+                    "algorithm": "token_bucket",
+                    "quota": 20,
+                    "duration": 300  # 20 requests/5min with bursts
+                },
+                "retry": {"max_attempts": 3, "wait": 1.0},
+                "timeout": 30.0,
+                "monitoring": {"log_threshold": 0.05}
+            }
+        },
+        # User-specific endpoints with sliding window
+        {
+            "pattern": "/api/users/*/data",
+            "features": {
+                "rate_limit": {
+                    "algorithm": "sliding_window",
+                    "quota": 100,
+                    "duration": 60
+                },
+                "cache": {"expire_s": 300},
+                "timeout": 10.0
+            }
+        },
+        # Health checks with minimal overhead
+        {
+            "pattern": "^/health$",
+            "features": {
+                "monitoring": {"log_threshold": 0.01}
+            }
+        }
+    ],
+    "default_features": {
+        "timeout": 5.0,
+        "monitoring": {"log_threshold": 1.0}
+    }
+}
+
+# Apply to any ASGI app
+gateway = create_gateway(config, your_app)
+```
+
+### Decorator-Based Patterns
 
 ### 1. Request Caching
 Reduce backend load and improve response times:
@@ -312,26 +497,69 @@ async def shutdown_gateway():
 
 Premier is evolving into a comprehensive API gateway solution:
 
-### Current Features ✅
-- Request/Response Caching
-- Rate Limiting & Throttling  
-- Retry Logic & Circuit Breakers
-- Timeout Management
-- Performance Monitoring
-- Multiple Backend Support
+### Current Features
+- **Configuration-Driven ASGI Gateway** - Path-based feature configuration
+- **Request/Response Caching** - Function and response-level caching
+- **Rate Limiting & Throttling** - Multiple algorithms with path-based rules
+- **Retry Logic** - Configurable retry strategies per path
+- **Timeout Management** - Per-path timeout configuration
+- **Performance Monitoring** - Path-specific monitoring thresholds
+- **Multiple Backend Support** - In-memory and Redis providers
+- **Regex Path Matching** - Flexible pattern matching for routes
 
-### Coming Soon 🚧
-- Load Balancing
-- Request/Response Transformation
-- Authentication & Authorization Plugins
-- Request Routing & Path Rewriting
-- WebSocket Gateway Support
-- GraphQL Gateway Features
-- Metrics & Analytics Dashboard
+### Coming Soon
+- **Load Balancing** - Multi-backend routing and health checks
+- **Request/Response Transformation** - JSON/XML transformation pipelines
+- **Authentication & Authorization** - JWT, OAuth2, API key plugins
+- **Request Routing & Path Rewriting** - Advanced routing rules
+- **WebSocket Gateway Support** - Real-time connection management
+- **GraphQL Gateway Features** - Schema stitching and federation
+- **Metrics & Analytics Dashboard** - Real-time monitoring UI
+- **Circuit Breaker Patterns** - Automatic failure detection per path
 
 ## 📚 API Reference
 
-### Premier Gateway Class
+### ASGI Gateway
+
+#### `create_gateway(config: GatewayConfig, app: Optional[Callable] = None) -> ASGIGateway`
+Creates a configuration-driven ASGI gateway.
+
+#### `GatewayConfig` TypedDict Structure:
+```python
+{
+    "keyspace": str,                    # Optional: Redis keyspace prefix
+    "paths": List[PathConfig],          # Path-based configurations
+    "default_features": FeatureConfig   # Optional: Default features for unmatched paths
+}
+```
+
+#### `PathConfig` TypedDict Structure:
+```python
+{
+    "pattern": str,        # Regex pattern or glob-style path pattern
+    "features": {          # Features to apply to matching paths
+        "rate_limit": {
+            "algorithm": str,     # "fixed_window", "sliding_window", "token_bucket", "leaky_bucket"
+            "quota": int,         # Number of requests allowed
+            "duration": int,      # Time window in seconds
+            "bucket_size": int    # Optional: For leaky bucket algorithm
+        },
+        "cache": {
+            "expire_s": int       # Cache TTL in seconds
+        },
+        "retry": {
+            "max_attempts": int,  # Maximum retry attempts
+            "wait": float         # Wait time between retries
+        },
+        "timeout": float,         # Request timeout in seconds
+        "monitoring": {
+            "log_threshold": float # Log requests slower than this (seconds)
+        }
+    }
+}
+```
+
+### Premier Decorator Class
 
 - `Premier(cache_provider=None, throttler=None, cache=None, keyspace="premier")`
 - `cache_result(expire_s=None, cache_key=None)` - Response caching
@@ -368,4 +596,4 @@ Contributions are welcome! Help us build the most developer-friendly API gateway
 
 ---
 
-*Transform any Python web application into a production-ready API gateway* 🚀
+*Transform any Python web application into a production-ready API gateway*

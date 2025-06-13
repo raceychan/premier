@@ -138,3 +138,7 @@ No longer support sync version of decorator, which means all decorated function 
 - ✅ Removed legacy task queue implementation
 - ✅ Made private functions properly private with underscore prefix
 
+### version 0.4.7
+
+
+Web GUI for config and monitor

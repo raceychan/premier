@@ -1,4 +1,4 @@
-from .facade import Premier as Premier
+from .main import Premier as Premier
 from .throttler.api import fixed_window as fixed_window
 from .throttler.api import leaky_bucket as leaky_bucket
 from .throttler.api import sliding_window as sliding_window

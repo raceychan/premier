@@ -7,5 +7,5 @@ from .throttler.errors import QuotaExceedsError as QuotaExceedsError
 from .throttler.throttler import Throttler as Throttler
 from .timer import ILogger as ILogger
 
-VERSION = "0.4.5"
+VERSION = "0.4.6"
 __version__ = VERSION

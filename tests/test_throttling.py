@@ -172,20 +172,24 @@ async def test_throttler_with_leaky_bucket(aiothrottler: Throttler):
         # Remove sleep to speed up test
         return None
 
-    tries = 6
+    # Test concurrent requests to fill bucket capacity
+    # Create tasks concurrently so they hit the bucket at the same time
+    todo = set[asyncio.Task[None]]()
     rejected = 0
-    res: list[int | None] = []
 
+    tries = 6
     for _ in range(tries):
+        task = asyncio.create_task(add(3, 5))
+        todo.add(task)
+    done, _ = await asyncio.wait(todo)
+
+    for e in done:
         try:
-            await add(3, 5)  # decorated function is async
+            e.result()
         except BucketFullError:
             rejected += 1
-        else:
-            res.append(None)
 
     # In leaky bucket: bucket_size allows immediate tasks, quota determines rate
     # So we expect bucket_size tasks to succeed immediately, rest rejected
     expected_rejected = tries - bucket_size
     assert rejected == expected_rejected
-    assert len(res) == tries - rejected

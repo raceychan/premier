@@ -1,19 +1,12 @@
-import asyncio
 import time
-from typing import Any, Callable, Generic, Hashable, TypeVar
 
 from premier._logs import logger as logger
-from premier.providers import AsyncCacheProvider, AsyncQueueProvider
-from premier.throttler.errors import BucketFullError, QueueFullError
+from premier.providers import AsyncCacheProvider
+from premier.throttler.errors import BucketFullError
 from premier.throttler.interface import (
-    AsyncTaskScheduler,
     AsyncThrottleHandler,
     CountDown,
-    P,
-    R,
 )
-
-TaskArgs = tuple[tuple[Any, ...], dict[Any, Any]]
 
 
 class Timer:
@@ -27,7 +20,6 @@ class Timer:
 class AsyncDefaultHandler(AsyncThrottleHandler):
     def __init__(self, cache: AsyncCacheProvider, timer: Timer | None = None):
         self._cache = cache
-        self._queue_registry: dict[Hashable, AsyncQueueProvider[TaskArgs]] = dict()
         self._timer = timer or Timer()
 
     async def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
@@ -99,55 +91,46 @@ class AsyncDefaultHandler(AsyncThrottleHandler):
         await self._cache.set(key, (now, new_tokens - 1))
         return -1
 
-    def leaky_bucket(
+    async def leaky_bucket(
         self, key: str, bucket_size: int, quota: int, duration: int
-    ) -> AsyncTaskScheduler:
-        from premier.providers import AsyncInMemoryQueue
-
-        task_queue = self._queue_registry.get(key, None)
-        if not task_queue:
-            task_queue = self._queue_registry[key] = AsyncInMemoryQueue[TaskArgs](
-                maxsize=bucket_size
-            )
-
-        async def _calculate_delay(key: str, quota: int, duration: int) -> CountDown:
-            now = self._timer()
-            last_execution_time = await self._cache.get(key)
-            if not last_execution_time:
-                await self._cache.set(key, now)
-                return -1
-            elapsed = now - last_execution_time
-            leak_rate = quota / duration
-            delay = (1 / leak_rate) - elapsed
-            if delay <= 0:
-                await self._cache.set(key, now)
-                return -1
-            return delay
-
-        async def _poll_and_execute(func: Callable[..., R]) -> None:
-            while (delay := await _calculate_delay(key, quota, duration)) > 0:
-                await asyncio.sleep(delay)
-            item = await task_queue.get(block=False)
-            if item is None:
-                args, kwargs = (), {}
-            else:
-                args, kwargs = item
-            if asyncio.iscoroutinefunction(func):
-                await func(*args, **kwargs)
-            else:
-                func(*args, **kwargs)
-
-        async def _schedule_task(
-            func: Callable[P, R], *args: P.args, **kwargs: P.kwargs
-        ) -> None:
-            try:
-                await task_queue.put((args, kwargs))
-            except QueueFullError:
-                raise BucketFullError("Bucket is full. Cannot add more tasks.")
-
-            asyncio.create_task(_poll_and_execute(func))
-
-        return _schedule_task
+    ) -> CountDown:
+        """Simplified leaky bucket implementation without task queue.
+        
+        Returns -1 if request can proceed immediately, or delay in seconds if bucket is full.
+        Raises BucketFullError if the bucket capacity is exceeded.
+        """
+        now = self._timer()
+        bucket_key = f"{key}:bucket"
+        
+        # Get current bucket state: (last_leak_time, current_count)
+        cached_value = await self._cache.get(bucket_key)
+        last_leak_time, current_count = cached_value or (now, 0)
+        
+        # Calculate leak rate (requests per second)
+        leak_rate = quota / duration
+        elapsed = now - last_leak_time
+        
+        # Calculate how many tokens have leaked out
+        leaked_tokens = int(elapsed * leak_rate)
+        current_count = max(0, current_count - leaked_tokens)
+        
+        # Check if bucket is full
+        if current_count >= bucket_size:
+            raise BucketFullError("Bucket is full. Cannot add more tasks.")
+        
+        # Calculate delay until next token can be processed
+        if current_count == 0:
+            # Bucket is empty, can process immediately
+            await self._cache.set(bucket_key, (now, 1))
+            return -1
+        
+        # Add current request to bucket and calculate delay
+        new_count = current_count + 1
+        await self._cache.set(bucket_key, (now, new_count))
+        
+        # Delay is based on position in queue
+        delay = (new_count - 1) / leak_rate
+        return delay
 
     async def clear(self, keyspace: str = ""):
         await self._cache.clear(keyspace)
@@ -159,22 +142,61 @@ class AsyncDefaultHandler(AsyncThrottleHandler):
 try:
     from redis.asyncio.client import Redis as AIORedis
 
-    from premier.providers.redis import AsyncRedisCacheAdapter
+    from premier.providers.redis import AsyncRedisCache
+
 
     class AsyncRedisHandler(AsyncDefaultHandler):
-        def __init__(self, redis: AIORedis):
-            cache = AsyncRedisCacheAdapter(redis)
+        def __init__(self, cache: AsyncRedisCache):
             super().__init__(cache)
-            self._redis = redis
+            self._cache = cache
 
         @classmethod
         def from_url(cls, url: str) -> "AsyncRedisHandler":
             redis = AIORedis.from_url(url)
-            return cls(redis)
+            cache = AsyncRedisCache(redis)
+            return cls(cache)
+
+        async def fixed_window(self, key: str, quota: int, duration: int) -> CountDown:
+            """Redis Lua script implementation of fixed window algorithm."""
+            return await self._cache.eval_script(
+                "fixed_window", 
+                keys=[key], 
+                args=[str(quota), str(duration)]
+            )
+
+        async def sliding_window(self, key: str, quota: int, duration: int) -> CountDown:
+            """Redis Lua script implementation of sliding window algorithm."""
+            return await self._cache.eval_script(
+                "sliding_window", 
+                keys=[key], 
+                args=[str(quota), str(duration)]
+            )
+
+        async def token_bucket(self, key: str, quota: int, duration: int) -> CountDown:
+            """Redis Lua script implementation of token bucket algorithm."""
+            return await self._cache.eval_script(
+                "token_bucket", 
+                keys=[key], 
+                args=[str(quota), str(duration)]
+            )
+
+        async def leaky_bucket(self, key: str, bucket_size: int, quota: int, duration: int) -> CountDown:
+            """Redis Lua script implementation of leaky bucket algorithm."""
+            bucket_key = f"{key}:bucket"
+            result = await self._cache.eval_script(
+                "leaky_bucket", 
+                keys=[bucket_key], 
+                args=[str(bucket_size), str(quota), str(duration)]
+            )
+            
+            # Handle bucket full error code from Lua script
+            if result == -999:
+                raise BucketFullError("Bucket is full. Cannot add more tasks.")
+            
+            return result
 
         async def close(self) -> None:
             await super().close()
-            await self._redis.aclose()
 
 except ImportError:
     pass

@@ -6,7 +6,7 @@ try:
 
     T = TypeVar("T")
 
-    class AsyncRedisCacheAdapter:
+    class AsyncRedisCache:
         def __init__(self, redis: AIORedis, decoder=json.loads, encoder=json.dumps):
             self._redis = redis
             self._encoder = encoder
@@ -44,6 +44,23 @@ try:
 
         async def close(self) -> None:
             await self._redis.aclose()
+
+        async def eval_script(self, script_name: str, keys: list[str], args: list[str]) -> float:
+            """Execute a Lua script by name with given keys and arguments."""
+            import pathlib
+            script_dir = pathlib.Path(__file__).parent.parent / "throttler" / "lua"
+            script_path = script_dir / f"{script_name}.lua"
+            
+            with open(script_path, 'r') as f:
+                script_content = f.read()
+            
+            result = await self._redis.eval(script_content, len(keys), *keys, *args)
+            return float(result)
+
+        async def register_script(self, script_content: str) -> str:
+            """Register a Lua script and return its SHA hash."""
+            script = self._redis.register_script(script_content)
+            return script.sha
 
     class AsyncRedisQueueAdapter(Generic[T]):
         def __init__(

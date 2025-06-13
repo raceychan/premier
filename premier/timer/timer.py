@@ -1,10 +1,8 @@
-import signal
 from asyncio import wait_for as await_for
 from contextlib import contextmanager
 from functools import wraps
 from inspect import iscoroutinefunction
 from time import perf_counter
-from types import TracebackType
 from typing import Any, Awaitable, Callable, Optional, cast, overload
 
 from premier.interface import FlexDecor, P, R
@@ -95,45 +93,10 @@ def timeit(
         return decorator(func__)
 
 
-class Timeout:
-    def __init__(self, seconds: int, error_msg: str = ""):
-        self.seconds = seconds
-        self.error_msg = error_msg or f"Timed out after {seconds} seconds"
-
-    def handle_timeout(self, signume: int, frame: Any):
-        raise TimeoutError(self.error_msg)
-
-    def __enter__(self):
-        signal.signal(signal.SIGALRM, self.handle_timeout)
-        signal.alarm(self.seconds)
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ):
-        signal.alarm(0)
-
-
 def timeout(seconds: int, *, logger: ILogger | None = None):
     def decor_dispatch(func: Callable[..., Any]):
-        import platform
-
-        is_windows = platform.uname().system == "Windows"
-
-        def sync_timeout(*args: Any, **kwargs: Any):
-            if is_windows:
-
-                ...  # use threading
-            else:
-                ...  # use signal
-                signal.signal(signal.SIGALRM, func)
-                # Define a timeout for your function
-                signal.alarm(10)
-
-            # use threading.join for this
-            raise NotImplementedError
+        if not iscoroutinefunction(func):
+            raise ValueError("timeout decorator only supports async functions")
 
         async def async_timeout(*args: Any, **kwargs: Any):
             coro = func(*args, **kwargs)
@@ -145,6 +108,6 @@ def timeout(seconds: int, *, logger: ILogger | None = None):
                 raise te
             return res
 
-        return async_timeout if iscoroutinefunction(func) else sync_timeout
+        return async_timeout
 
     return decor_dispatch

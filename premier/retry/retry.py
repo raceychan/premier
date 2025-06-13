@@ -1,9 +1,11 @@
 import asyncio
 import functools
 from collections.abc import Callable
-from typing import Any, Awaitable, TypeVar, Union
+from typing import  Awaitable, TypeVar, Union
 
 from typing_extensions import assert_never
+
+from premier.interface import P
 
 T = TypeVar("T")
 
@@ -47,6 +49,7 @@ def retry(
     max_attempts: int = 3,
     wait: WaitStrategy = 1,
     exceptions: tuple[type[Exception], ...] = (Exception,),  # TODO: retry on, raise on
+    on_fail: Callable[P, Awaitable[None]] | None = None,
 ) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
     """
     Retry decorator for async functions with configurable wait strategies.
@@ -59,9 +62,9 @@ def retry(
     """
     get_wait_time = wait_time_calculator_factory(wait)
 
-    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
+    def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         @functools.wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> T:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             last_exception: Exception | None = None
 
             for attempt in range(max_attempts):
@@ -73,13 +76,15 @@ def retry(
                     if attempt == max_attempts - 1:
                         break
 
+                    if on_fail is not None:
+                        await on_fail(*args, **kwargs)
+
                     wait_time = get_wait_time(attempt)
                     if wait_time > 0:
                         await asyncio.sleep(wait_time)
 
-            if last_exception is not None:
-                raise last_exception
-            raise RuntimeError("Retry failed without capturing exception")
+            assert last_exception
+            raise last_exception
 
         return wrapper
 

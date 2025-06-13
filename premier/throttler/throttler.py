@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 from functools import wraps
 from typing import Awaitable, Callable
@@ -68,10 +69,18 @@ class Throttler:
                     keymaker=keymaker,
                 )
                 if throttle_algo is ThrottleAlgo.LEAKY_BUCKET:
-                    scheduler = self._aiohandler.leaky_bucket(
+                    countdown = await self._aiohandler.leaky_bucket(
                         key, bucket_size=bucket_size, quota=quota, duration=duration
                     )
-                    return await scheduler(func, *args, **kwargs)
+                    if countdown != -1:
+                        # For leaky bucket, we sleep for the delay instead of raising error
+                        await asyncio.sleep(countdown)
+
+                    # Execute the function after delay
+                    if asyncio.iscoroutinefunction(func):
+                        return await func(*args, **kwargs)
+                    else:
+                        return func(*args, **kwargs)
                 countdown = await self._aiohandler.dispatch(throttle_algo)(
                     key, quota=quota, duration=duration
                 )
@@ -145,7 +154,3 @@ class Throttler:
         if countdown == -1:  # func is ready to be executed
             return
         raise QuotaExceedsError(quota, duration, countdown)
-
-
-# from premier.providers import AsyncInMemoryCache
-# throttler = Throttler().config(handler=AsyncDefaultHandler(AsyncInMemoryCache()))

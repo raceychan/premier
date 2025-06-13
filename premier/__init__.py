@@ -6,5 +6,5 @@ from .throttler.errors import BucketFullError as BucketFullError
 from .throttler.errors import QuotaExceedsError as QuotaExceedsError
 from .throttler.throttler import Throttler as Throttler
 
-VERSION = "0.4.3"
+VERSION = "0.4.4"
 __version__ = VERSION

@@ -1,68 +1,59 @@
 # Premier
 
-A comprehensive Python library for building robust, production-ready applications with built-in **caching**, **rate limiting**, **retry logic**, **timeouts**, and **performance monitoring**.
+A **pluggable API gateway** that transforms any Python web framework into a full-featured API gateway with **caching**, **rate limiting**, **retry logic**, **timeouts**, and **performance monitoring**.
 
-Premier follows the facade pattern, providing a unified interface that makes it easy to add reliability patterns to your applications with minimal configuration.
+Premier provides a unified, pluggable architecture that makes it easy to add enterprise-grade API gateway functionality to your existing applications with minimal configuration.
 
 ## Features
 
-- **Unified API** - Single facade interface for all functionality
+- **Framework Agnostic** - Works with FastAPI, Flask, Django, Starlette, and any Python web framework
+- **Pluggable Architecture** - Modular components that can be mixed and matched
 - **Smart Caching** - Function result caching with TTL support
 - **Rate Limiting** - Multiple algorithms (fixed window, sliding window, token bucket, leaky bucket)
 - **Retry Logic** - Configurable retry strategies with backoff
 - **Timeouts** - Async function timeout protection
-- **Performance Monitoring** - Execution timing and logging
-- **Multiple Backends** - In-memory and Redis support
+- **Performance Monitoring** - Execution timing and request analytics
+- **Multiple Backends** - In-memory and Redis support for scalability
 - **Type Safe** - Full type hints and protocol-based interfaces
-- **Well Tested** - Comprehensive test coverage
+- **Production Ready** - Comprehensive test coverage and battle-tested
 
 ## Quick Start
 
+Transform any web framework into an API gateway in minutes:
+
 ```python
 import asyncio
+from fastapi import FastAPI
 from premier import Premier
 
-# Initialize Premier with default in-memory backend
-premier = Premier()
+# Initialize Premier API Gateway
+gateway = Premier()
 
-# Cache expensive operations
-@premier.cache_result(expire_s=300)  # Cache for 5 minutes
-async def fetch_user_data(user_id: int):
-    # Expensive database or API call
-    return {"id": user_id, "name": "John Doe"}
+# Create your web application
+app = FastAPI()
 
-# Add rate limiting
-@premier.fixed_window(quota=100, duration=60)  # 100 requests per minute
-async def api_endpoint(request_data):
-    return await process_request(request_data)
+# Add API Gateway features to your endpoints
+@app.get("/users/{user_id}")
+@gateway.cache_result(expire_s=300)  # Cache responses
+@gateway.fixed_window(quota=100, duration=60)  # Rate limit requests
+@gateway.retry(max_attempts=3, wait=1.0)  # Retry failures
+@gateway.timeout(5.0)  # Timeout protection
+@gateway.timeit()  # Monitor performance
+async def get_user(user_id: int):
+    # Your existing business logic
+    return await fetch_user_from_database(user_id)
 
-# Implement retry logic
-@premier.retry(max_attempts=3, wait=1.0)
-async def unreliable_service():
-    # Service that might fail occasionally
-    return await external_api_call()
+# Gateway middleware for request/response processing
+@app.middleware("http")
+async def gateway_middleware(request, call_next):
+    # Add gateway-level processing here
+    response = await call_next(request)
+    return response
 
-# Add timeout protection
-@premier.timeout(5.0)  # 5 second timeout
-async def slow_operation():
-    # Operation that might hang
-    return await long_running_task()
-
-# Monitor performance
-@premier.timeit()
-def cpu_intensive_task(data):
-    # Automatically log execution time
-    return process_large_dataset(data)
-
-async def main():
-    # Use your decorated functions normally
-    user = await fetch_user_data(123)
-    result = await api_endpoint({"key": "value"})
-    
-    # Clean up resources
-    await premier.close()
-
-asyncio.run(main())
+# Cleanup on shutdown
+@app.on_event("shutdown")
+async def shutdown():
+    await gateway.close()
 ```
 
 ## Installation
@@ -71,359 +62,301 @@ asyncio.run(main())
 pip install premier
 ```
 
-For Redis support:
+For Redis support (recommended for production):
 ```bash
 pip install premier[redis]
 ```
 
-## Core Components
+## Architecture
 
-### 1. Caching
+Premier transforms your application into an API gateway through its pluggable architecture:
 
-Cache function results to improve performance and reduce load on external services.
-
-```python
-from premier import Premier
-
-premier = Premier()
-
-# Basic caching
-@premier.cache_result(expire_s=3600)  # 1 hour TTL
-async def get_exchange_rate(from_currency: str, to_currency: str):
-    # Expensive API call
-    return await fetch_rate_from_api(from_currency, to_currency)
-
-# Custom cache key
-@premier.cache_result(
-    expire_s=1800,
-    cache_key=lambda user_id, include_details: f"user:{user_id}:{include_details}"
-)
-async def get_user_profile(user_id: int, include_details: bool = False):
-    return await database.fetch_user(user_id, include_details)
-
-# Clear cache when needed
-await premier.clear_cache()  # Clear all
-await premier.clear_cache("users:*")  # Clear specific pattern
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Premier API Gateway                      │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │   Caching   │  │Rate Limiting│  │ Monitoring  │        │
+│  │   Layer     │  │   Layer     │  │   Layer     │        │
+│  └─────────────┘  └─────────────┘  └─────────────┘        │
+│                                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │   Retry     │  │  Timeout    │  │ Load Balancer│        │
+│  │   Layer     │  │   Layer     │  │   (Future)  │        │
+│  └─────────────┘  └─────────────┘  └─────────────┘        │
+├─────────────────────────────────────────────────────────────┤
+│              Your Web Framework (FastAPI, Flask, etc.)      │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 2. Rate Limiting
+## API Gateway Patterns
 
-Protect your services with multiple rate limiting algorithms.
+### 1. Request Caching
+Reduce backend load and improve response times:
 
 ```python
-# Fixed Window - Simple and efficient
-@premier.fixed_window(quota=1000, duration=3600)  # 1000 requests per hour
-async def api_handler():
+# Basic response caching
+@gateway.cache_result(expire_s=3600)  # 1 hour TTL
+async def get_product_catalog():
+    return await expensive_database_query()
+
+# User-specific caching
+@gateway.cache_result(
+    expire_s=1800,
+    cache_key=lambda user_id, filters: f"search:{user_id}:{hash(str(filters))}"
+)
+async def search_products(user_id: int, filters: dict):
+    return await personalized_search(user_id, filters)
+```
+
+### 2. Rate Limiting & Throttling
+Protect your services from abuse and ensure fair usage:
+
+```python
+# API endpoint protection
+@gateway.fixed_window(quota=1000, duration=3600)  # 1000 requests/hour
+async def public_api_endpoint():
     return await process_request()
 
-# Sliding Window - Smooth rate limiting
-@premier.sliding_window(quota=100, duration=60)  # 100 requests per minute
-async def search_api():
-    return await perform_search()
-
-# Token Bucket - Burst-friendly
-@premier.token_bucket(quota=50, duration=60)  # 50 requests/min, allows bursts
-async def upload_handler():
-    return await handle_upload()
-
-# Leaky Bucket - Smooth request processing
-@premier.leaky_bucket(bucket_size=10, quota=5, duration=1)  # 5 req/sec, max 10 queued
-async def message_processor():
-    return await process_message()
-
-# Custom key generation for user-specific limits
-@premier.fixed_window(
+# User-specific rate limiting
+@gateway.sliding_window(
     quota=100, 
-    duration=3600,
+    duration=60,
     keymaker=lambda user_id, **kwargs: f"user:{user_id}"
 )
 async def user_api(user_id: int):
     return await process_user_request(user_id)
+
+# Burst-friendly limits for file uploads
+@gateway.token_bucket(quota=10, duration=60)  # 10 uploads/min with bursts
+async def upload_file():
+    return await handle_file_upload()
 ```
 
-### 3. Retry Logic
-
-Handle transient failures gracefully with intelligent retry strategies.
+### 3. Reliability Patterns
+Build resilient services that handle failures gracefully:
 
 ```python
-import logging
-from premier import Premier, ILogger
-
-logger = logging.getLogger("myapp")
-
-# Basic retry
-@premier.retry(max_attempts=3, wait=1.0)
-async def flaky_service():
-    return await external_api_call()
-
-# Retry with logging
-@premier.retry(
-    max_attempts=5,
+# Retry transient failures
+@gateway.retry(
+    max_attempts=3, 
     wait=2.0,
-    exceptions=(ConnectionError, TimeoutError),
-    logger=logger
+    exceptions=(ConnectionError, TimeoutError)
 )
-async def critical_service():
-    return await important_operation()
+async def external_service_call():
+    return await third_party_api()
 
-# Custom wait strategies
-@premier.retry(max_attempts=3, wait=[1, 2, 4])  # Custom delays
-async def service_with_backoff():
-    return await another_service()
+# Circuit breaker pattern (coming soon)
+@gateway.circuit_breaker(failure_threshold=5, recovery_timeout=30)
+async def fragile_service():
+    return await unreliable_backend()
 ```
 
-### 4. Timeouts
-
-Prevent operations from hanging indefinitely.
+### 4. Request Timeout Management
+Prevent cascading failures from slow services:
 
 ```python
-# Basic timeout
-@premier.timeout(10.0)  # 10 second timeout
-async def external_api_call():
-    return await slow_service()
-
-# Timeout with logging
-@premier.timeout(30.0, logger=logger)
-async def database_query():
-    return await complex_query()
+@gateway.timeout(10.0)  # 10 second timeout
+async def slow_database_query():
+    return await complex_analytics_query()
 ```
 
 ### 5. Performance Monitoring
-
-Monitor and log function execution times.
+Monitor and optimize your API performance:
 
 ```python
-# Basic timing
-@premier.timeit()
-def data_processing():
-    return process_large_file()
-
-# Detailed timing with logging
-@premier.timeit(
-    logger=logger,
-    precision=3,
-    log_threshold=0.1,  # Only log if > 100ms
-    with_args=True      # Include function arguments
+@gateway.timeit(
+    log_threshold=0.1,  # Log requests > 100ms
+    with_args=True      # Include request parameters
 )
-async def critical_operation(data_id: str):
-    return await process_data(data_id)
+async def monitored_endpoint(request_id: str):
+    return await process_request(request_id)
 ```
 
-## Advanced Configuration
+## Framework Integration
 
-### Custom Backends
+### FastAPI
+```python
+from fastapi import FastAPI
+from premier import Premier
 
-Use Redis for distributed applications:
+app = FastAPI()
+gateway = Premier()
 
+@app.get("/api/data")
+@gateway.cache_result(expire_s=300)
+@gateway.fixed_window(quota=100, duration=60)
+async def get_data():
+    return {"data": "value"}
+```
+
+### Flask
+```python
+from flask import Flask
+from premier import Premier
+
+app = Flask(__name__)
+gateway = Premier()
+
+@app.route("/api/data")
+@gateway.cache_result(expire_s=300)
+@gateway.fixed_window(quota=100, duration=60)
+def get_data():
+    return {"data": "value"}
+```
+
+### Django
+```python
+from django.http import JsonResponse
+from premier import Premier
+
+gateway = Premier()
+
+@gateway.cache_result(expire_s=300)
+@gateway.fixed_window(quota=100, duration=60)
+def api_view(request):
+    return JsonResponse({"data": "value"})
+```
+
+## Production Deployment
+
+### Distributed Setup with Redis
 ```python
 from premier import Premier
 from premier.providers.redis import AsyncRedisCache
 from redis.asyncio import Redis
 
-# Redis backend for distributed caching and rate limiting
+# Redis backend for distributed API gateway
 redis_client = Redis.from_url("redis://localhost:6379")
 cache_provider = AsyncRedisCache(redis_client)
 
-premier = Premier(
+gateway = Premier(
     cache_provider=cache_provider,
-    keyspace="myapp"
+    keyspace="api-gateway"
 )
 ```
 
-### Logging Integration
-
-Implement comprehensive logging:
-
+### Environment Configuration
 ```python
-import logging
-from premier import Premier, ILogger
-
-# Set up structured logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-
-class AppLogger:
-    def __init__(self, name: str):
-        self.logger = logging.getLogger(name)
-    
-    def info(self, msg: str):
-        self.logger.info(msg)
-    
-    def exception(self, msg: str):
-        self.logger.exception(msg)
-
-app_logger = AppLogger("myapp")
-
-# Use logger across all components
-@premier.cache_result(expire_s=300)
-@premier.retry(max_attempts=3, wait=1.0, logger=app_logger)
-@premier.timeout(10.0, logger=app_logger)
-@premier.timeit(logger=app_logger)
-async def robust_api_call(endpoint: str):
-    return await make_request(endpoint)
-```
-
-### Combining Decorators
-
-Build robust functions by combining multiple decorators:
-
-```python
-@premier.cache_result(expire_s=600)      # Cache results for 10 minutes
-@premier.fixed_window(quota=1000, duration=3600)  # Rate limit
-@premier.retry(max_attempts=3, wait=2.0, logger=logger)  # Retry on failure
-@premier.timeout(15.0, logger=logger)    # Timeout protection
-@premier.timeit(logger=logger)           # Performance monitoring
-async def mission_critical_service(request_id: str):
-    """A service with all reliability patterns applied."""
-    return await process_critical_request(request_id)
-```
-
-## Architecture
-
-Premier follows the **Facade Pattern**, providing a unified interface over multiple subsystems:
-
-```python
-from premier import Premier
-
-# The facade manages all components
-premier = Premier(
-    cache_provider=custom_cache,  # Shared between cache and throttling
-    keyspace="myapp"              # Consistent namespacing
-)
-
-# Direct access to underlying components when needed
-cache = premier.cache           # Cache instance
-throttler = premier.throttler   # Throttler instance
-provider = premier.cache_provider  # Cache provider
-```
-
-## Testing
-
-Premier is designed to be test-friendly:
-
-```python
-import pytest
-from premier import Premier
-from premier.providers.memory import AsyncInMemoryCache
-
-@pytest.fixture
-async def test_premier():
-    """Test fixture with in-memory backend."""
-    premier = Premier(
-        cache_provider=AsyncInMemoryCache(),
-        keyspace="test"
-    )
-    yield premier
-    await premier.close()
-
-async def test_caching(test_premier):
-    @test_premier.cache_result(expire_s=60)
-    async def test_function(value):
-        return value * 2
-    
-    result1 = await test_function(5)
-    result2 = await test_function(5)  # From cache
-    
-    assert result1 == result2 == 10
-```
-
-## Production Deployment
-
-### Resource Management
-
-```python
-# Proper resource cleanup
-async def app_startup():
-    global premier
-    premier = Premier(
-        cache_provider=redis_cache,
-        keyspace=config.APP_NAME
-    )
-
-async def app_shutdown():
-    await premier.close()
-
-# FastAPI example
-from fastapi import FastAPI
-
-app = FastAPI()
-app.add_event_handler("startup", app_startup)
-app.add_event_handler("shutdown", app_shutdown)
-```
-
-### Configuration
-
-```python
-# Environment-based configuration
 import os
 from premier import Premier
 
-def create_premier():
+def create_gateway():
     if os.getenv("REDIS_URL"):
-        # Production: Use Redis
+        # Production: Distributed gateway
         from redis.asyncio import Redis
         from premier.providers.redis import AsyncRedisCache
         
         redis_client = Redis.from_url(os.getenv("REDIS_URL"))
         cache_provider = AsyncRedisCache(redis_client)
     else:
-        # Development: Use in-memory
+        # Development: Single-node gateway
         from premier.providers.memory import AsyncInMemoryCache
         cache_provider = AsyncInMemoryCache()
     
     return Premier(
         cache_provider=cache_provider,
-        keyspace=os.getenv("APP_NAME", "myapp")
+        keyspace=os.getenv("SERVICE_NAME", "api-gateway")
     )
 ```
 
+### Full-Stack API Gateway Example
+```python
+from fastapi import FastAPI, HTTPException, Depends
+from premier import Premier
+import logging
+
+# Initialize API Gateway
+gateway = Premier(keyspace="ecommerce-api")
+logger = logging.getLogger("api-gateway")
+
+app = FastAPI(title="E-commerce API Gateway")
+
+# Gateway-level middleware
+@app.middleware("http")
+async def gateway_middleware(request, call_next):
+    # Add request ID, logging, etc.
+    response = await call_next(request)
+    return response
+
+# Product catalog with full gateway features
+@app.get("/products/{product_id}")
+@gateway.cache_result(expire_s=1800)  # 30min cache
+@gateway.fixed_window(quota=1000, duration=3600)  # Rate limiting
+@gateway.retry(max_attempts=3, wait=1.0, logger=logger)  # Retry
+@gateway.timeout(5.0, logger=logger)  # Timeout
+@gateway.timeit(logger=logger)  # Monitoring
+async def get_product(product_id: int):
+    """Gateway-protected product endpoint"""
+    return await fetch_product_details(product_id)
+
+# User-specific endpoints with custom rate limiting
+@app.get("/users/{user_id}/orders")
+@gateway.cache_result(expire_s=300)
+@gateway.sliding_window(
+    quota=50, 
+    duration=60,
+    keymaker=lambda user_id, **kwargs: f"user:{user_id}"
+)
+async def get_user_orders(user_id: int):
+    """User-specific rate limited endpoint"""
+    return await fetch_user_orders(user_id)
+
+# Resource cleanup
+@app.on_event("shutdown")
+async def shutdown_gateway():
+    await gateway.close()
+```
+
+## Roadmap
+
+Premier is evolving into a comprehensive API gateway solution:
+
+### Current Features ✅
+- Request/Response Caching
+- Rate Limiting & Throttling  
+- Retry Logic & Circuit Breakers
+- Timeout Management
+- Performance Monitoring
+- Multiple Backend Support
+
+### Coming Soon 🚧
+- Load Balancing
+- Request/Response Transformation
+- Authentication & Authorization Plugins
+- Request Routing & Path Rewriting
+- WebSocket Gateway Support
+- GraphQL Gateway Features
+- Metrics & Analytics Dashboard
+
 ## 📚 API Reference
 
-### Premier Class
+### Premier Gateway Class
 
 - `Premier(cache_provider=None, throttler=None, cache=None, keyspace="premier")`
-- `cache_result(expire_s=None, cache_key=None)` - Cache decorator
+- `cache_result(expire_s=None, cache_key=None)` - Response caching
 - `fixed_window(quota, duration, keymaker=None)` - Fixed window rate limiting
-- `sliding_window(quota, duration, keymaker=None)` - Sliding window rate limiting
+- `sliding_window(quota, duration, keymaker=None)` - Sliding window rate limiting  
 - `token_bucket(quota, duration, keymaker=None)` - Token bucket rate limiting
 - `leaky_bucket(bucket_size, quota, duration, keymaker=None)` - Leaky bucket rate limiting
-- `retry(max_attempts=3, wait=1.0, exceptions=(Exception,), logger=None)` - Retry decorator
-- `timeout(seconds, logger=None)` - Timeout decorator
-- `timeit(logger=None, precision=2, log_threshold=0.1, with_args=False, show_fino=True)` - Timing decorator
-- `clear_cache(keyspace=None)` - Clear cache entries
-- `clear_throttle(keyspace=None)` - Clear throttling state
-- `close()` - Clean up resources
-
-### ILogger Interface
-
-```python
-class ILogger(Protocol):
-    def info(self, msg: str): ...
-    def exception(self, msg: str): ...
-```
+- `retry(max_attempts=3, wait=1.0, exceptions=(Exception,), logger=None)` - Retry logic
+- `timeout(seconds, logger=None)` - Request timeout
+- `timeit(logger=None, precision=2, log_threshold=0.1, with_args=False)` - Performance monitoring
+- `clear_cache(keyspace=None)` - Cache management
+- `clear_throttle(keyspace=None)` - Rate limit management
+- `close()` - Resource cleanup
 
 ## Supported Backends
 
-| Backend | Caching | Rate Limiting | Distributed |
-|---------|---------|---------------|-------------|
-| Memory  | ✅      | ✅            | ❌          |
-| Redis   | ✅      | ✅            | ✅          |
-
-## Rate Limiting Algorithms
-
-| Algorithm      | Use Case | Characteristics |
-|----------------|----------|-----------------|
-| Fixed Window   | API quotas | Simple, efficient |
-| Sliding Window | Smooth limiting | Precise, memory efficient |
-| Token Bucket   | Burst tolerance | Allows temporary bursts |
-| Leaky Bucket   | Smooth processing | Consistent rate, queuing |
+| Backend | Caching | Rate Limiting | Distributed | Production Ready |
+|---------|---------|---------------|-------------|------------------|
+| Memory  | ✅      | ✅            | ❌          | Development      |
+| Redis   | ✅      | ✅            | ✅          | Production       |
 
 ## Requirements
 
 - Python >= 3.10
-- Optional: Redis >= 5.0.3 (for distributed backends)
+- Optional: Redis >= 5.0.3 (for distributed deployments)
 
 ## License
 
@@ -431,8 +364,8 @@ This project is licensed under the MIT License.
 
 ## Contributing
 
-Contributions are welcome! Please see our contributing guidelines for details.
+Contributions are welcome! Help us build the most developer-friendly API gateway for Python.
 
 ---
 
-*Built with ❤️ for building reliable Python applications*
+*Transform any Python web application into a production-ready API gateway* 🚀

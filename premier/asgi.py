@@ -170,7 +170,9 @@ def apply_cache(
 
         # Try to get cached response
         cached_response = await cache_provider.get(cache_key)
-        if cached_response is not None:
+        scope["_cache_hit"] = cached_response is not None
+        
+        if scope["_cache_hit"]:
             # Send cached response
             await send(cached_response["start"])
             await send(cached_response["body"])
@@ -916,11 +918,10 @@ class ASGIGateway:
             method = scope.get("method", "GET")
             start_time = time.time()
             status = 200
-            cache_hit = False
             
             # Track response info
             async def tracking_send(message):
-                nonlocal status, cache_hit
+                nonlocal status
                 if message["type"] == "http.response.start":
                     status = message["status"]
                 await send(message)
@@ -929,7 +930,7 @@ class ASGIGateway:
                 await handler(scope, receive, tracking_send)
             finally:
                 response_time = (time.time() - start_time) * 1000  # Convert to ms
-                self._dashboard.record_request(method, path, status, response_time, cache_hit)
+                self._dashboard.record_request(method, path, status, response_time, scope["_cache_hit"])
         
         return stats_wrapper
     

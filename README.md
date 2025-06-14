@@ -8,6 +8,11 @@ Premier is a versatile Python toolkit that can be used in three main ways:
 
 Premier transforms any Python web application into a full-featured API gateway with caching, rate limiting, retry logic, timeouts, and performance monitoring.
 
+--- 
+[![PyPI version](https://badge.fury.io/py/premier.svg)](https://badge.fury.io/py/premier)
+[![Python Version](https://img.shields.io/pypi/pyversions/premier.svg)](https://pypi.org/project/premier/)
+[![License](https://img.shields.io/github/license/raceychan/premier)](https://github.com/raceychan/premier/blob/master/LICENSE)
+
 ## Documentation
 
 - **[Web Dashboard](docs/web-gui.md)** - Real-time monitoring and configuration management
@@ -290,11 +295,12 @@ if __name__ == "__main__":
 
 ## What's Next
 
-- [x] web gui
-- [x] websocket support
-- [ ] circuit breaker
-- [ ] load balancer
-- [ ] mcp
+- [x] Web GUI
+- [x] Websocket Support
+- [ ] Circuit Breaker
+- [ ] Load Balancer
+- [ ] Auth(OAuth, jwt, etc.)
+- [ ] MCP integration
 
 
 ## License

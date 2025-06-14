@@ -1,5 +1,43 @@
 # CHANGELOG
 
+## version 0.4.8 (2025-06-14)
+
+### Major Features
+
+- **🎛️ Web Dashboard** - Built-in web GUI for real-time monitoring and configuration management
+  - Live request/response metrics and performance analytics
+  - Interactive configuration editor with YAML validation
+  - Cache management and rate limiting dashboard
+  - Health monitoring and system statistics
+  - Available at `/premier/dashboard`
+
+- **🚀 Complete Example Application** - Production-ready example with FastAPI backend
+  - Comprehensive API endpoints demonstrating all Premier features
+  - YAML configuration with path-specific policies
+  - Documentation and testing guides
+  - Dashboard integration showcase
+
+- **📚 Enhanced Documentation** - Comprehensive documentation overhaul
+  - Separate guides for web dashboard and examples
+  - Updated README with better organization
+  - Clear quick-start instructions
+  - Production deployment guidance
+
+### New Files & Components
+
+- `premier/dashboard/` - Complete web dashboard implementation
+- `example/` - Full-featured example application
+- `docs/web-gui.md` - Web dashboard documentation
+- `docs/examples.md` - Examples and tutorials guide
+- Enhanced ASGI gateway with dashboard integration
+
+### Improvements
+
+- **ASGI Gateway Enhancement** - Better integration and dashboard support
+- **Configuration Management** - Hot-reload configuration from web interface
+- **Monitoring** - Real-time performance metrics and request analytics
+- **User Experience** - Simplified setup with comprehensive examples
+
 ## v0.4.0 (2024-06-05)
 
 ### Chore
@@ -128,7 +166,7 @@ refactor:
 No longer support sync version of decorator, which means all decorated function would be async.
 
 
-### version 0.4.6
+## version 0.4.6
 
 - ✅ Implemented facade pattern with Premier class
 - ✅ Added comprehensive logging support with ILogger interface
@@ -138,7 +176,7 @@ No longer support sync version of decorator, which means all decorated function 
 - ✅ Removed legacy task queue implementation
 - ✅ Made private functions properly private with underscore prefix
 
-### version 0.4.7
+## version 0.4.7
 
 
 Web GUI for config and monitor

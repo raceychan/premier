@@ -108,17 +108,13 @@ def apply_retry_wrapper(
     if retry_config is None:
         return handler
 
-    @retry(
+    return retry(
         max_attempts=retry_config.max_attempts,
         wait=retry_config.wait,
         exceptions=retry_config.exceptions,
         on_fail=retry_config.on_fail,
         logger=retry_config.logger,
-    )
-    async def retry_wrapper(scope: dict, receive: Callable, send: Callable):
-        await handler(scope, receive, send)
-
-    return retry_wrapper
+    )(handler)
 
 
 def apply_rate_limit(handler: Callable, rate_limiter: Optional[Any]) -> Callable:
@@ -126,15 +122,11 @@ def apply_rate_limit(handler: Callable, rate_limiter: Optional[Any]) -> Callable
     if rate_limiter is None:
         return handler
 
-    limiter = rate_limiter
+    handler = rate_limiter(handler)
 
     async def rate_limit_wrapper(scope: dict, receive: Callable, send: Callable):
-        @limiter
-        async def limited_func():
-            await handler(scope, receive, send)
-
         try:
-            await limited_func()
+            await handler(scope, receive, send)
         except Exception:
             await send(
                 {
@@ -176,10 +168,15 @@ def apply_cache(
         # Try to get cached response
         cached_response = await cache_provider.get(cache_key)
         if cached_response is not None:
+            # Mark cache hit in scope for stats tracking
+            scope["_cache_hit"] = True
             # Send cached response
             await send(cached_response["start"])
             await send(cached_response["body"])
             return
+
+        # Mark cache miss in scope for stats tracking
+        scope["_cache_hit"] = False
 
         # Capture response for caching
         response_parts = {"start": None, "body": None}
@@ -712,15 +709,12 @@ class ASGIGateway:
 
     def _apply_websocket_rate_limit(self, handler: Callable, rate_limiter) -> Callable:
         """Apply rate limiting to WebSocket connections."""
+        handler = rate_limiter(handler)
 
         async def rate_limit_wrapper(scope: dict, receive: Callable, send: Callable):
             # Check rate limit on connection
-            @rate_limiter
-            async def limited_connect():
-                pass
 
             try:
-                await limited_connect()
                 await handler(scope, receive, send)
             except Exception:
                 # Rate limit exceeded, close connection
@@ -740,16 +734,14 @@ class ASGIGateway:
             return handler
 
         async def stats_wrapper(scope: dict, receive: Callable, send: Callable):
-
             path = scope.get("path", "/")
             method = scope.get("method", "GET")
             start_time = time.time()
             status = 200
-            cache_hit = False
 
             # Track response info
             async def tracking_send(message):
-                nonlocal status, cache_hit
+                nonlocal status
                 if message["type"] == "http.response.start":
                     status = message["status"]
                 await send(message)
@@ -758,6 +750,7 @@ class ASGIGateway:
                 await handler(scope, receive, tracking_send)
             finally:
                 response_time = (time.time() - start_time) * 1000  # Convert to ms
+                cache_hit = scope.get("_cache_hit", False)
                 self._dashboard_service.record_request(
                     method, path, status, response_time, cache_hit
                 )

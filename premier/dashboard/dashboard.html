@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,25 +15,26 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f5f5;
-            color: #333;
+            background: #ffffff;
+            color: #09090b;
             line-height: 1.6;
         }
 
         .header {
-            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
-            color: white;
+            background: #ffffff;
+            color: #09090b;
             padding: 1rem 2rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-bottom: 2px solid #e4e4e7;
         }
 
         .header h1 {
             font-size: 2rem;
             font-weight: 600;
+            color: #09090b;
         }
 
         .header p {
-            opacity: 0.9;
+            color: #71717a;
             margin-top: 0.5rem;
         }
 
@@ -50,25 +52,24 @@
         }
 
         .stat-card {
-            background: white;
+            background: #ffffff;
             padding: 1.5rem;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            border-left: 4px solid #2563eb;
+            border-radius: 8px;
+            border: 1px solid #e4e4e7;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
         }
 
         .stat-card h3 {
-            color: #666;
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            color: #71717a;
+            font-size: 0.875rem;
+            font-weight: 500;
             margin-bottom: 0.5rem;
         }
 
         .stat-card .value {
             font-size: 2rem;
-            font-weight: 700;
-            color: #333;
+            font-weight: 600;
+            color: #09090b;
         }
 
         .stat-card .change {
@@ -76,27 +77,34 @@
             margin-top: 0.5rem;
         }
 
-        .change.positive { color: #10b981; }
-        .change.negative { color: #ef4444; }
+        .change.positive {
+            color: #16a34a;
+        }
+
+        .change.negative {
+            color: #dc2626;
+        }
 
         .dashboard-section {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            background: #ffffff;
+            border-radius: 8px;
+            border: 1px solid #e4e4e7;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
             margin-bottom: 2rem;
         }
 
         .section-header {
             padding: 1.5rem;
-            border-bottom: 1px solid #e5e7eb;
+            border-bottom: 1px solid #e4e4e7;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
         .section-header h2 {
-            color: #374151;
-            font-size: 1.25rem;
+            color: #09090b;
+            font-size: 1.125rem;
+            font-weight: 600;
         }
 
         .section-content {
@@ -104,12 +112,12 @@
         }
 
         .config-editor {
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
+            background: #f9f9f9;
+            border: 1px solid #e4e4e7;
             border-radius: 6px;
             padding: 1rem;
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            font-size: 0.9rem;
+            font-size: 0.875rem;
             line-height: 1.5;
             white-space: pre-wrap;
             overflow-x: auto;
@@ -128,30 +136,32 @@
         .form-group label {
             display: block;
             margin-bottom: 0.5rem;
-            font-weight: 600;
-            color: #374151;
+            font-weight: 500;
+            color: #09090b;
+            font-size: 0.875rem;
         }
 
         .form-group input,
         .form-group select {
             width: 100%;
-            padding: 0.75rem;
-            border: 1px solid #d1d5db;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #e4e4e7;
             border-radius: 6px;
-            font-size: 0.9rem;
+            font-size: 0.875rem;
             transition: border-color 0.2s;
+            background: #ffffff;
         }
 
         .form-group input:focus,
         .form-group select:focus {
             outline: none;
-            border-color: #2563eb;
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+            border-color: #09090b;
+            box-shadow: 0 0 0 2px rgba(9, 9, 11, 0.1);
         }
 
         .form-section {
-            background: white;
-            border: 1px solid #e5e7eb;
+            background: #ffffff;
+            border: 1px solid #e4e4e7;
             border-radius: 8px;
             padding: 1.5rem;
             margin-bottom: 1.5rem;
@@ -159,24 +169,25 @@
 
         .form-section h3 {
             margin-bottom: 1rem;
-            color: #1f2937;
-            font-size: 1.1rem;
-            border-bottom: 2px solid #e5e7eb;
+            color: #09090b;
+            font-size: 1rem;
+            font-weight: 600;
+            border-bottom: 1px solid #e4e4e7;
             padding-bottom: 0.5rem;
         }
 
         .path-config {
-            border: 1px solid #d1d5db;
+            border: 1px solid #e4e4e7;
             border-radius: 8px;
             margin-bottom: 1rem;
-            background: #f9fafb;
+            background: #ffffff;
             overflow: hidden;
         }
 
         .path-config-header {
             padding: 1rem;
-            background: #f3f4f6;
-            border-bottom: 1px solid #e5e7eb;
+            background: #f9f9f9;
+            border-bottom: 1px solid #e4e4e7;
             cursor: pointer;
             display: flex;
             justify-content: space-between;
@@ -185,15 +196,17 @@
         }
 
         .path-config-header:hover {
-            background: #e5e7eb;
+            background: #f4f4f5;
         }
 
         .path-config-header h4 {
             margin: 0;
-            color: #374151;
+            color: #09090b;
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
         }
 
         .path-config-content {
@@ -225,31 +238,35 @@
         }
 
         .remove-path {
-            background: #ef4444;
+            background: #dc2626;
             color: white;
             border: none;
             padding: 0.25rem 0.5rem;
             border-radius: 4px;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             cursor: pointer;
+            font-weight: 500;
         }
 
         .remove-path:hover {
-            background: #dc2626;
+            background: #b91c1c;
         }
 
         .add-path {
-            background: #059669;
+            background: #16a34a;
             color: white;
             border: none;
             padding: 0.5rem 1rem;
             border-radius: 6px;
             cursor: pointer;
             margin-bottom: 1rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            float: right;
         }
 
         .add-path:hover {
-            background: #047857;
+            background: #15803d;
         }
 
         .form-row {
@@ -276,8 +293,8 @@
         }
 
         .feature-section {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
+            background: #f9f9f9;
+            border: 1px solid #e4e4e7;
             border-radius: 6px;
             padding: 1rem;
             margin-top: 1rem;
@@ -285,8 +302,9 @@
 
         .feature-section h5 {
             margin-bottom: 0.75rem;
-            color: #475569;
-            font-size: 0.95rem;
+            color: #09090b;
+            font-size: 0.875rem;
+            font-weight: 500;
         }
 
         .modal {
@@ -301,28 +319,31 @@
         }
 
         .modal-content {
-            background-color: white;
+            background-color: #ffffff;
             margin: 5% auto;
             border-radius: 8px;
             width: 80%;
             max-width: 800px;
             max-height: 80vh;
             overflow: hidden;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            border: 1px solid #e4e4e7;
         }
 
         .modal-header {
             padding: 1rem 1.5rem;
-            border-bottom: 1px solid #e5e7eb;
+            border-bottom: 1px solid #e4e4e7;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: #f9fafb;
+            background: #f9f9f9;
         }
 
         .modal-header h3 {
             margin: 0;
-            color: #374151;
+            color: #09090b;
+            font-size: 1rem;
+            font-weight: 600;
         }
 
         .modal-close {
@@ -341,8 +362,8 @@
         }
 
         .modal-close:hover {
-            background: #e5e7eb;
-            color: #374151;
+            background: #f4f4f5;
+            color: #09090b;
         }
 
         .modal-body {
@@ -353,44 +374,46 @@
 
         .modal-footer {
             padding: 1rem 1.5rem;
-            border-top: 1px solid #e5e7eb;
+            border-top: 1px solid #e4e4e7;
             display: flex;
             justify-content: flex-end;
-            background: #f9fafb;
+            background: #f9f9f9;
         }
 
         .yaml-display {
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
+            background: #f9f9f9;
+            border: 1px solid #e4e4e7;
             border-radius: 6px;
             padding: 1rem;
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            font-size: 0.9rem;
+            font-size: 0.875rem;
             line-height: 1.5;
             white-space: pre-wrap;
             overflow-x: auto;
             margin: 0;
-            color: #374151;
+            color: #09090b;
         }
 
         .yaml-view-btn {
-            background: transparent;
-            color: #6b7280;
-            border: 1px solid #d1d5db;
-            padding: 0.4rem 0.8rem;
-            border-radius: 4px;
-            font-size: 0.8rem;
+            background: #ffffff;
+            color: #71717a;
+            border: 1px solid #e4e4e7;
+            padding: 0.375rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
             cursor: pointer;
             transition: all 0.2s;
+            font-weight: 500;
         }
 
         .yaml-view-btn:hover {
-            background: #f9fafb;
-            color: #374151;
-            border-color: #9ca3af;
+            background: #f4f4f5;
+            color: #09090b;
+            border-color: #d4d4d8;
         }
 
         @media (max-width: 768px) {
+
             .form-row,
             .form-row-3 {
                 grid-template-columns: 1fr;
@@ -398,26 +421,32 @@
         }
 
         .btn {
-            background: #2563eb;
-            color: white;
+            background: #09090b;
+            color: #fafafa;
             border: none;
-            padding: 0.75rem 1.5rem;
+            padding: 0.5rem 1rem;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 0.9rem;
+            font-size: 0.875rem;
+            font-weight: 500;
             transition: background 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .btn:hover {
-            background: #1d4ed8;
+            background: #18181b;
         }
 
         .btn-secondary {
-            background: #6b7280;
+            background: #ffffff;
+            color: #09090b;
+            border: 1px solid #e4e4e7;
         }
 
         .btn-secondary:hover {
-            background: #4b5563;
+            background: #f4f4f5;
         }
 
         .table {
@@ -429,17 +458,18 @@
         .table td {
             padding: 0.75rem;
             text-align: left;
-            border-bottom: 1px solid #e5e7eb;
+            border-bottom: 1px solid #e4e4e7;
         }
 
         .table th {
-            background: #f9fafb;
-            font-weight: 600;
-            color: #374151;
+            background: #f4f4f5;
+            font-weight: 500;
+            color: #71717a;
+            font-size: 0.875rem;
         }
 
         .table tbody tr:hover {
-            background: #f9fafb;
+            background: #f9f9f9;
         }
 
         .status-badge {
@@ -450,45 +480,164 @@
         }
 
         .status-active {
-            background: #d1fae5;
-            color: #065f46;
+            background: #dcfce7;
+            color: #15803d;
         }
 
         .status-inactive {
-            background: #fee2e2;
-            color: #991b1b;
+            background: #fecaca;
+            color: #dc2626;
         }
 
         .refresh-btn {
-            float: right;
-            background: #10b981;
+            background: #16a34a;
         }
 
         .refresh-btn:hover {
-            background: #059669;
+            background: #15803d;
+        }
+
+        .clear-btn {
+            background: #dc2626;
+            color: white;
+            margin-top: 2rem;
+            margin-right: 1rem;
+        }
+
+        .clear-btn-wrapper {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .clear-btn:hover {
+            background: #b91c1c;
+        }
+
+        .section-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .feature-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-right: 0.25rem;
+            margin-bottom: 0.25rem;
+            border: 1px solid;
+            line-height: 1;
+        }
+
+        .feature-badge-cache {
+            background: #dbeafe;
+            color: #1d4ed8;
+            border-color: #93c5fd;
+        }
+
+        .feature-badge-rate-limit {
+            background: #fed7d7;
+            color: #c53030;
+            border-color: #feb2b2;
+        }
+
+        .feature-badge-timeout {
+            background: #fef3c7;
+            color: #d69e2e;
+            border-color: #fbbf24;
+        }
+
+        .feature-badge-retry {
+            background: #d1fae5;
+            color: #059669;
+            border-color: #6ee7b7;
+        }
+
+        .feature-badge-monitoring {
+            background: #e0e7ff;
+            color: #5b21b6;
+            border-color: #c4b5fd;
+        }
+
+        .feature-badge-icon {
+            width: 12px;
+            height: 12px;
+            display: inline-block;
         }
 
         .config-actions {
             margin-top: 1rem;
             display: flex;
             gap: 1rem;
+            justify-content: flex-end;
+        }
+
+        .requests-table-container {
+            min-height: 400px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .pagination-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            margin-top: 1rem;
+            padding: 1rem;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .pagination-controls button {
+            background: #09090b;
+            color: #fafafa;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .pagination-controls button:hover:not(:disabled) {
+            background: #18181b;
+        }
+
+        .pagination-controls button:disabled {
+            background: #a1a1aa;
+            cursor: not-allowed;
+        }
+
+        .pagination-controls span {
+            font-weight: 500;
+            color: #09090b;
         }
 
         @media (max-width: 768px) {
             .container {
                 padding: 0 1rem;
             }
-            
+
             .stats-grid {
                 grid-template-columns: 1fr;
             }
-            
+
             .config-actions {
                 flex-direction: column;
+            }
+
+            .requests-table-container {
+                min-height: 300px;
+                max-height: 400px;
             }
         }
     </style>
 </head>
+
 <body>
     <div class="header">
         <h1>Premier API Gateway</h1>
@@ -524,26 +673,42 @@
         <div class="dashboard-section">
             <div class="section-header">
                 <h2>Recent Requests</h2>
-                <button class="btn refresh-btn" onclick="refreshStats()">Refresh</button>
+                <div class="section-buttons">
+                    <button class="btn refresh-btn" onclick="refreshStats()">Refresh</button>
+                </div>
             </div>
             <div class="section-content">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Time</th>
-                            <th>Method</th>
-                            <th>Path</th>
-                            <th>Status</th>
-                            <th>Response Time</th>
-                            <th>Cache</th>
-                        </tr>
-                    </thead>
-                    <tbody id="recent-requests">
-                        <tr>
-                            <td colspan="6" style="text-align: center; color: #6b7280;">No recent requests</td>
-                        </tr>
-                    </tbody>
-                </table>
+                <div class="requests-table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Method</th>
+                                <th>Path</th>
+                                <th>Status</th>
+                                <th>Response Time</th>
+                                <th>Cache</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-requests">
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: #6b7280; padding: 2rem;">
+                                    No recent requests
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="separator"></div>
+
+                    <div class="clear-btn-wrapper">
+                        <button class="btn clear-btn" onclick="clearRequests()">Clear</button>
+                    </div>
+                    <!-- <button class="btn clear-btn" onclick="clearRequests()">Clear</button> -->
+                </div>
+                <div id="pagination-controls" class="pagination-controls" style="display: none;">
+                    <!-- Pagination buttons will be inserted here -->
+                </div>
             </div>
         </div>
 
@@ -589,9 +754,14 @@
                     </div>
 
                     <div class="form-section">
-                        <h3>Path Configurations</h3>
+
                         <div id="path-configs"></div>
-                        <button class="add-path" onclick="addPathConfig()">+ Add Path</button>
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <h3 style="margin-bottom: 0;">Path Configurations</h3>
+                            <button class="add-path" onclick="addPathConfig()" style="float: none; margin-bottom: 0;">+
+                                Add Path</button>
+                        </div>
                     </div>
 
                     <div class="form-section">
@@ -599,11 +769,10 @@
                         <div id="default-features"></div>
                     </div>
                 </div>
-                
+
                 <div class="config-actions">
-                    <button class="btn" onclick="saveConfig()">Save Configuration</button>
                     <button class="btn btn-secondary" onclick="reloadConfig()">Reload from File</button>
-                    <button class="btn btn-secondary" onclick="validateConfig()">Validate</button>
+                    <button class="btn" onclick="saveConfig()">Save Configuration</button>
                 </div>
             </div>
         </div>
@@ -631,7 +800,7 @@
         let configData = {};
 
         // Initialize dashboard
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             loadDashboard();
             startAutoRefresh();
         });
@@ -645,11 +814,20 @@
         }
 
         // YAML Modal functions
-        function viewYamlModal() {
-            const formData = collectFormData();
-            const yamlString = convertToYaml(formData);
-            document.getElementById('yaml-display').textContent = yamlString;
-            document.getElementById('yaml-modal').style.display = 'block';
+        async function viewYamlModal() {
+            try {
+                const response = await fetch('/premier/dashboard/api/config');
+                const yamlString = await response.text();
+                document.getElementById('yaml-display').textContent = yamlString;
+                document.getElementById('yaml-modal').style.display = 'block';
+            } catch (error) {
+                console.error('Failed to load YAML config:', error);
+                // Fallback to form data
+                const formData = collectFormData();
+                const yamlString = convertToYaml(formData);
+                document.getElementById('yaml-display').textContent = yamlString;
+                document.getElementById('yaml-modal').style.display = 'block';
+            }
         }
 
         function closeYamlModal() {
@@ -657,7 +835,7 @@
         }
 
         // Close modal when clicking outside
-        document.addEventListener('keydown', function(event) {
+        document.addEventListener('keydown', function (event) {
             if (event.key === 'Escape') {
                 closeYamlModal();
             }
@@ -667,29 +845,29 @@
         function createFeatureSection(features = {}, containerId) {
             const container = document.getElementById(containerId);
             if (!container) return;
-            
+
             // For default features, create collapsible sections like paths
             if (containerId === 'default-features') {
                 createCollapsibleFeatures(features, containerId);
             } else {
-                // For path features, use the original checkbox approach
-                createCheckboxFeatures(features, containerId);
+                // For path features, also use collapsible card approach (no checkboxes)
+                createCollapsibleFeatures(features, containerId);
             }
         }
 
         function createCollapsibleFeatures(features = {}, containerId) {
             const container = document.getElementById(containerId);
             if (!container) return;
-            
+
             const featureTypes = ['cache', 'rate_limit', 'timeout', 'retry', 'monitoring'];
-            
+
             container.innerHTML = featureTypes.map(featureType => {
                 const featureConfig = features[featureType] || {};
                 const hasFeature = Object.keys(featureConfig).length > 0;
                 const featureId = `${containerId}-${featureType}`;
-                
+
                 let featureName = featureType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-                
+
                 return `
                     <div class="path-config" ${hasFeature ? 'style="display: block;"' : 'style="display: block;"'}>
                         <div class="path-config-header" onclick="toggleFeatureConfig(this)">
@@ -705,19 +883,12 @@
                     </div>
                 `;
             }).join('');
-            
-            // Add button to add new features
-            const addButton = document.createElement('button');
-            addButton.className = 'add-path';
-            addButton.textContent = '+ Add Feature';
-            addButton.onclick = () => addDefaultFeature(containerId);
-            container.appendChild(addButton);
         }
 
         function createCheckboxFeatures(features = {}, containerId) {
             const container = document.getElementById(containerId);
             if (!container) return;
-            
+
             container.innerHTML = `
                 <div class="checkbox-group">
                     <input type="checkbox" id="${containerId}-cache" onchange="toggleFeature('${containerId}', 'cache')" ${features.cache ? 'checked' : ''}>
@@ -895,7 +1066,7 @@
             const featureConfig = button.closest('.path-config');
             const removeBtn = featureConfig.querySelector('.remove-path');
             removeBtn.style.display = 'none';
-            
+
             // Clear all form fields in this feature
             const inputs = featureConfig.querySelectorAll('input, select');
             inputs.forEach(input => {
@@ -917,7 +1088,7 @@
             const container = document.getElementById('path-configs');
             const pathIndex = container.children.length;
             const pathId = `path-${pathIndex}`;
-            
+
             const pathDiv = document.createElement('div');
             pathDiv.className = 'path-config';
             pathDiv.innerHTML = `
@@ -936,7 +1107,7 @@
                     <div id="${pathId}-features"></div>
                 </div>
             `;
-            
+
             container.appendChild(pathDiv);
             createFeatureSection({}, `${pathId}-features`);
         }
@@ -961,15 +1132,15 @@
 
         function populateForm(data) {
             if (!data.premier) return;
-            
+
             const premier = data.premier;
-            
+
             // Set keyspace
             document.getElementById('keyspace').value = premier.keyspace || '';
-            
+
             // Clear existing paths
             document.getElementById('path-configs').innerHTML = '';
-            
+
             // Add paths
             if (premier.paths) {
                 premier.paths.forEach((pathConfig, index) => {
@@ -977,17 +1148,17 @@
                     const pathId = `path-${index}`;
                     const patternInput = document.getElementById(`${pathId}-pattern`);
                     patternInput.value = pathConfig.pattern || '';
-                    
+
                     // Update the pattern preview
                     updatePathPreview(pathId);
-                    
+
                     // Populate features for this path
                     if (pathConfig.features) {
                         populateFeatures(`${pathId}-features`, pathConfig.features);
                     }
                 });
             }
-            
+
             // Populate default features
             if (premier.default_features) {
                 createFeatureSection(premier.default_features, 'default-features');
@@ -998,23 +1169,19 @@
         }
 
         function populateFeatures(containerId, features) {
-            // Check feature checkboxes and populate values
+            // For collapsible features, populate form fields directly
             Object.keys(features).forEach(featureType => {
-                const checkbox = document.getElementById(`${containerId}-${featureType}`);
-                if (checkbox) {
-                    checkbox.checked = true;
-                    toggleFeature(containerId, featureType);
-                    
-                    const featureConfig = features[featureType];
-                    
-                    // Populate specific feature fields
-                    Object.keys(featureConfig).forEach(key => {
-                        const input = document.getElementById(`${containerId}-${featureType}-${key.replace('_', '-')}`);
-                        if (input) {
-                            input.value = featureConfig[key];
-                        }
-                    });
-                }
+                const featureConfig = features[featureType];
+                const featureId = `${containerId}-${featureType}`;
+
+                // Populate specific feature fields based on feature type
+                Object.keys(featureConfig).forEach(key => {
+                    const inputId = `${featureId}-${key.replace('_', '-')}`;
+                    const input = document.getElementById(inputId);
+                    if (input) {
+                        input.value = featureConfig[key];
+                    }
+                });
             });
         }
 
@@ -1032,143 +1199,145 @@
                     default_features: {}
                 }
             };
-            
+
             // Collect path configurations
-            const pathConfigs = document.querySelectorAll('.path-config');
-            pathConfigs.forEach((pathDiv, index) => {
-                const pathId = `path-${index}`;
-                const pattern = document.getElementById(`${pathId}-pattern`).value;
-                
-                if (pattern) {
-                    const pathConfig = {
-                        pattern: pattern,
-                        features: collectFeatures(`${pathId}-features`)
-                    };
-                    
-                    if (Object.keys(pathConfig.features).length > 0) {
-                        data.premier.paths.push(pathConfig);
+            const pathConfigsContainer = document.getElementById('path-configs');
+            if (pathConfigsContainer) {
+                const pathConfigs = pathConfigsContainer.querySelectorAll('.path-config');
+                pathConfigs.forEach((pathDiv, index) => {
+                    const pathId = `path-${index}`;
+                    const patternElement = document.getElementById(`${pathId}-pattern`);
+                    if (patternElement) {
+                        const pattern = patternElement.value;
+
+                        if (pattern) {
+                            const pathConfig = {
+                                pattern: pattern,
+                                features: collectFeatures(`${pathId}-features`)
+                            };
+
+                            if (Object.keys(pathConfig.features).length > 0) {
+                                data.premier.paths.push(pathConfig);
+                            }
+                        }
                     }
-                }
-            });
-            
+                });
+            }
+
             // Collect default features
             data.premier.default_features = collectFeatures('default-features');
-            
+
             return data;
         }
 
         function collectFeatures(containerId) {
             const features = {};
-            
-            // Handle default features (collapsible) vs path features (checkbox)
-            if (containerId === 'default-features') {
-                return collectCollapsibleFeatures(containerId);
-            } else {
-                return collectCheckboxFeatures(containerId);
-            }
+
+            // Both default features and path features now use collapsible approach
+            return collectCollapsibleFeatures(containerId);
         }
 
         function collectCollapsibleFeatures(containerId) {
             const features = {};
-            
+
             ['cache', 'rate_limit', 'timeout', 'retry', 'monitoring'].forEach(featureType => {
                 const feature = {};
                 const featureId = `${containerId}-${featureType}`;
-                
+
                 if (featureType === 'cache') {
                     const expireInput = document.getElementById(`${featureId}-expire-s`);
                     const keyInput = document.getElementById(`${featureId}-cache-key`);
                     if (expireInput && expireInput.value) feature.expire_s = parseInt(expireInput.value);
                     if (keyInput && keyInput.value) feature.cache_key = keyInput.value;
                 }
-                
+
                 else if (featureType === 'rate_limit') {
                     const quotaInput = document.getElementById(`${featureId}-quota`);
                     const durationInput = document.getElementById(`${featureId}-duration`);
                     const algorithmInput = document.getElementById(`${featureId}-algorithm`);
                     const bucketSizeInput = document.getElementById(`${featureId}-bucket-size`);
-                    
+
                     if (quotaInput && quotaInput.value) feature.quota = parseInt(quotaInput.value);
                     if (durationInput && durationInput.value) feature.duration = parseInt(durationInput.value);
                     if (algorithmInput && algorithmInput.value) feature.algorithm = algorithmInput.value;
                     if (bucketSizeInput && bucketSizeInput.value) feature.bucket_size = parseInt(bucketSizeInput.value);
                 }
-                
+
                 else if (featureType === 'timeout') {
                     const secondsInput = document.getElementById(`${featureId}-seconds`);
                     if (secondsInput && secondsInput.value) feature.seconds = parseFloat(secondsInput.value);
                 }
-                
+
                 else if (featureType === 'retry') {
                     const maxAttemptsInput = document.getElementById(`${featureId}-max-attempts`);
                     const waitInput = document.getElementById(`${featureId}-wait`);
                     if (maxAttemptsInput && maxAttemptsInput.value) feature.max_attempts = parseInt(maxAttemptsInput.value);
                     if (waitInput && waitInput.value) feature.wait = parseFloat(waitInput.value);
                 }
-                
+
                 else if (featureType === 'monitoring') {
                     const logThresholdInput = document.getElementById(`${featureId}-log-threshold`);
                     if (logThresholdInput && logThresholdInput.value) feature.log_threshold = parseFloat(logThresholdInput.value);
                 }
-                
+
                 if (Object.keys(feature).length > 0) {
                     features[featureType] = feature;
                 }
             });
-            
+
             return features;
         }
 
         function collectCheckboxFeatures(containerId) {
             const features = {};
-            
+
             ['cache', 'rate_limit', 'timeout', 'retry', 'monitoring'].forEach(featureType => {
                 const checkbox = document.getElementById(`${containerId}-${featureType}`);
                 if (checkbox && checkbox.checked) {
                     const feature = {};
-                    
+
                     if (featureType === 'cache') {
                         const expire = document.getElementById(`${containerId}-cache-expire`).value;
                         const key = document.getElementById(`${containerId}-cache-key`).value;
                         if (expire) feature.expire_s = parseInt(expire);
                         if (key) feature.cache_key = key;
                     }
-                    
+
                     else if (featureType === 'rate_limit') {
                         const quota = document.getElementById(`${containerId}-rate-limit-quota`).value;
                         const duration = document.getElementById(`${containerId}-rate-limit-duration`).value;
                         const algorithm = document.getElementById(`${containerId}-rate-limit-algorithm`).value;
                         const bucketSize = document.getElementById(`${containerId}-rate-limit-bucket-size`).value;
-                        
+
                         if (quota) feature.quota = parseInt(quota);
                         if (duration) feature.duration = parseInt(duration);
                         if (algorithm) feature.algorithm = algorithm;
                         if (bucketSize) feature.bucket_size = parseInt(bucketSize);
                     }
-                    
+
                     else if (featureType === 'timeout') {
                         const seconds = document.getElementById(`${containerId}-timeout-seconds`).value;
                         if (seconds) feature.seconds = parseFloat(seconds);
                     }
-                    
+
                     else if (featureType === 'retry') {
                         const maxAttempts = document.getElementById(`${containerId}-retry-max-attempts`).value;
                         const wait = document.getElementById(`${containerId}-retry-wait`).value;
                         if (maxAttempts) feature.max_attempts = parseInt(maxAttempts);
                         if (wait) feature.wait = parseFloat(wait);
                     }
-                    
+
                     else if (featureType === 'monitoring') {
                         const logThreshold = document.getElementById(`${containerId}-monitoring-log-threshold`).value;
                         if (logThreshold) feature.log_threshold = parseFloat(logThreshold);
                     }
-                    
+
                     if (Object.keys(feature).length > 0) {
                         features[featureType] = feature;
                     }
                 }
             });
-            
+
             return features;
         }
 
@@ -1186,34 +1355,120 @@
             }
         }
 
+        // Pagination state
+        let currentPage = 1;
+        const requestsPerPage = 10;
+        let allRequests = [];
+
         async function refreshStats() {
             try {
                 const response = await fetch('/premier/dashboard/api/stats');
                 const stats = await response.json();
-                
-                document.getElementById('total-requests').textContent = stats.total_requests || 0;
-                document.getElementById('cache-hit-rate').textContent = (stats.cache_hit_rate || 0) + '%';
-                document.getElementById('rate-limited').textContent = stats.rate_limited || 0;
-                document.getElementById('avg-response-time').textContent = (stats.avg_response_time || 0) + 'ms';
-                
-                // Update recent requests table
-                const tbody = document.getElementById('recent-requests');
-                if (stats.recent_requests && stats.recent_requests.length > 0) {
-                    tbody.innerHTML = stats.recent_requests.map(req => `
-                        <tr>
-                            <td>${new Date(req.timestamp).toLocaleTimeString()}</td>
-                            <td>${req.method}</td>
-                            <td>${req.path}</td>
-                            <td>${req.status}</td>
-                            <td>${req.response_time}ms</td>
-                            <td>${req.cache_hit ? 'HIT' : 'MISS'}</td>
-                        </tr>
-                    `).join('');
-                } else {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #6b7280;">No recent requests</td></tr>';
-                }
+
+                // Update stats cards with real numbers and change indicators
+                updateStatCard('total-requests', stats.total_requests || 0, stats.total_requests_change);
+                updateStatCard('cache-hit-rate', (stats.cache_hit_rate || 0) + '%', stats.cache_hit_rate_change);
+                updateStatCard('rate-limited', stats.rate_limited_requests || 0, stats.rate_limited_change);
+                updateStatCard('avg-response-time', (stats.avg_response_time || 0) + 'ms', stats.avg_response_time_change);
+
+                // Store all requests for pagination
+                allRequests = stats.recent_requests || [];
+                currentPage = 1; // Reset to first page
+                updateRecentRequestsTable();
             } catch (error) {
                 console.error('Failed to refresh stats:', error);
+                // Show error state
+                document.getElementById('total-requests').textContent = 'Error';
+                document.getElementById('cache-hit-rate').textContent = 'Error';
+                document.getElementById('rate-limited').textContent = 'Error';
+                document.getElementById('avg-response-time').textContent = 'Error';
+            }
+        }
+
+        function updateStatCard(elementId, value, change) {
+            document.getElementById(elementId).textContent = value;
+
+            // Update change indicator if provided
+            const changeElementId = getChangeElementId(elementId);
+            const changeElement = document.getElementById(changeElementId);
+
+            if (changeElement && change !== undefined) {
+                const isPositive = change >= 0;
+                const prefix = isPositive ? '+' : '';
+                const suffix = elementId === 'cache-hit-rate' || elementId === 'avg-response-time' ? '%' : '';
+                changeElement.textContent = `${prefix}${change}${suffix} from last hour`;
+
+                // Update styling based on what's considered positive for each metric
+                changeElement.className = 'change ';
+                if (elementId === 'rate-limited') {
+                    // For rate limited, lower is better
+                    changeElement.className += isPositive ? 'negative' : 'positive';
+                } else if (elementId === 'avg-response-time') {
+                    // For response time, lower is better
+                    changeElement.className += isPositive ? 'negative' : 'positive';
+                } else {
+                    // For total requests and cache hit rate, higher is better
+                    changeElement.className += isPositive ? 'positive' : 'negative';
+                }
+            }
+        }
+
+        function getChangeElementId(elementId) {
+            const mapping = {
+                'total-requests': 'requests-change',
+                'cache-hit-rate': 'cache-change',
+                'rate-limited': 'rate-limit-change',
+                'avg-response-time': 'response-time-change'
+            };
+            return mapping[elementId] || elementId + '-change';
+        }
+
+        function updateRecentRequestsTable() {
+            const tbody = document.getElementById('recent-requests');
+            const startIndex = (currentPage - 1) * requestsPerPage;
+            const endIndex = startIndex + requestsPerPage;
+            const pageRequests = allRequests.slice(startIndex, endIndex);
+
+            if (pageRequests.length > 0) {
+                tbody.innerHTML = pageRequests.map(req => `
+                    <tr>
+                        <td>${new Date(req.timestamp).toLocaleTimeString()}</td>
+                        <td>${req.method}</td>
+                        <td>${req.path}</td>
+                        <td>${req.status}</td>
+                        <td>${req.response_time}ms</td>
+                        <td>${req.cache_hit ? 'HIT' : 'MISS'}</td>
+                    </tr>
+                `).join('');
+            } else {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #6b7280; padding: 2rem;">No recent requests</td></tr>';
+            }
+
+            updatePaginationControls();
+        }
+
+        function updatePaginationControls() {
+            const totalPages = Math.ceil(allRequests.length / requestsPerPage);
+            const paginationContainer = document.getElementById('pagination-controls');
+
+            if (totalPages <= 1) {
+                paginationContainer.style.display = 'none';
+                return;
+            }
+
+            paginationContainer.style.display = 'flex';
+            paginationContainer.innerHTML = `
+                <button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>Previous</button>
+                <span>Page ${currentPage} of ${totalPages}</span>
+                <button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>
+            `;
+        }
+
+        function goToPage(page) {
+            const totalPages = Math.ceil(allRequests.length / requestsPerPage);
+            if (page >= 1 && page <= totalPages) {
+                currentPage = page;
+                updateRecentRequestsTable();
             }
         }
 
@@ -1221,13 +1476,13 @@
             try {
                 const response = await fetch('/premier/dashboard/api/policies');
                 const policies = await response.json();
-                
+
                 const tbody = document.getElementById('active-policies');
                 if (policies && policies.length > 0) {
                     tbody.innerHTML = policies.map(policy => `
                         <tr>
                             <td>${policy.pattern}</td>
-                            <td>${policy.features.join(', ')}</td>
+                            <td>${createFeatureBadges(policy.features)}</td>
                             <td><span class="status-badge status-active">Active</span></td>
                             <td>${policy.request_count || 0}</td>
                         </tr>
@@ -1244,15 +1499,15 @@
             try {
                 const response = await fetch('/premier/dashboard/api/config');
                 const config = await response.text();
-                
+
                 // Parse YAML and store for form view
                 try {
                     configData = parseYaml(config);
                     console.log('Parsed config data:', configData);
-                    
+
                     // Initialize default features section
                     createFeatureSection({}, 'default-features');
-                    
+
                     // Populate the form with loaded data
                     if (configData && configData.premier) {
                         console.log('Populating form with config data');
@@ -1282,16 +1537,30 @@
             // Convert form data to YAML
             const formData = collectFormData();
             const config = convertToYaml(formData);
-            
+
             try {
+                // First validate the configuration
+                const validateResponse = await fetch('/premier/dashboard/api/config/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: config
+                });
+
+                const validationResult = await validateResponse.json();
+                if (!validationResult.valid) {
+                    alert('Configuration is invalid: ' + validationResult.error);
+                    return;
+                }
+
+                // If validation passes, save the configuration
                 const response = await fetch('/premier/dashboard/api/config', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'text/plain' },
                     body: config
                 });
-                
+
                 if (response.ok) {
-                    alert('Configuration saved successfully!');
+                    alert('Configuration validated and saved successfully!');
                     // Update our stored config data
                     configData = parseYaml(config);
                     await loadPolicies(); // Refresh policies after config change
@@ -1314,14 +1583,14 @@
             // Convert form data to YAML for validation
             const formData = collectFormData();
             const config = convertToYaml(formData);
-            
+
             try {
                 const response = await fetch('/premier/dashboard/api/config/validate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'text/plain' },
                     body: config
                 });
-                
+
                 const result = await response.json();
                 if (result.valid) {
                     alert('Configuration is valid!');
@@ -1344,8 +1613,46 @@
             }
         }
 
+        // Clear requests function
+        function clearRequests() {
+            allRequests = [];
+            currentPage = 1;
+            updateRecentRequestsTable();
+        }
+
+        // Create feature badges with icons
+        function createFeatureBadges(features) {
+            const featureIcons = {
+                'cache': '⚡',
+                'rate_limit': '🛡️',
+                'timeout': '⏱️',
+                'retry': '🔄',
+                'monitoring': '📊'
+            };
+            
+            const featureNames = {
+                'cache': 'Cache',
+                'rate_limit': 'Rate Limit',
+                'timeout': 'Timeout',
+                'retry': 'Retry',
+                'monitoring': 'Monitoring'
+            };
+            
+            return features.map(feature => {
+                const icon = featureIcons[feature] || '⚙️';
+                const name = featureNames[feature] || feature;
+                const className = `feature-badge feature-badge-${feature.replace('_', '-')}`;
+                
+                return `<span class="${className}">
+                    <span class="feature-badge-icon">${icon}</span>
+                    ${name}
+                </span>`;
+            }).join('');
+        }
+
         // Cleanup on page unload
         window.addEventListener('beforeunload', stopAutoRefresh);
     </script>
 </body>
+
 </html>

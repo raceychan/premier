@@ -35,7 +35,7 @@ class ForwardService:
             session: Optional aiohttp ClientSession (will create one if not provided)
         """
         self.lb = lb_factory(servers or [])
-        self._session = session
+        self._session = session or aiohttp.ClienSession()
         self._hop_by_hop_headers = {
             "connection",
             "keep-alive",
@@ -46,12 +46,6 @@ class ForwardService:
             "transfer-encoding",
             "upgrade",
         }
-
-    async def _get_session(self) -> aiohttp.ClientSession:
-        """Get or create aiohttp ClientSession."""
-        if self._session is None:
-            self._session = aiohttp.ClientSession()
-        return self._session
 
     async def close(self):
         """Close the aiohttp session."""
@@ -164,10 +158,8 @@ class ForwardService:
         headers = self._extract_headers(scope)
         body = await self._collect_request_body(receive)
 
-        session = await self._get_session()
-
         try:
-            async with session.request(
+            async with self._session.request(
                 method=method, url=target_url, headers=headers, data=body
             ) as response:
                 await self._send_response_headers(send, response)
@@ -191,10 +183,8 @@ class ForwardService:
         # Extract headers
         headers = self._extract_headers(scope)
 
-        session = await self._get_session()
-
         try:
-            async with session.ws_connect(target_url, headers=headers) as ws:
+            async with self._session.ws_connect(target_url, headers=headers) as ws:
                 # Send WebSocket accept
                 await send({"type": "websocket.accept"})
 

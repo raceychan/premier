@@ -1,114 +1,83 @@
 premier:
-  keyspace: "example-api-gateway"
-  
+  keyspace: example-api-gateway
   paths:
-    # User endpoints - moderate caching and rate limiting
-    - pattern: "/api/users*"
+    - pattern: /api/users*
       features:
         cache:
-          expire_s: 300  # 5 minutes cache
-        rate_limit:
-          quota: 100     # 100 requests per minute
-          duration: 60
-          algorithm: "sliding_window"
+          expire_s: 300
         timeout:
-          seconds: 10.0
+          seconds: 10
         retry:
           max_attempts: 3
-          wait: 1.0
+          wait: 1
         monitoring:
-          log_threshold: 0.2  # Log requests >200ms
-    
-    # Product endpoints - longer caching (less frequent updates)
-    - pattern: "/api/products*"
+          log_threshold: 0.2
+    - pattern: /api/products*
       features:
         cache:
-          expire_s: 600  # 10 minutes cache
-        rate_limit:
-          quota: 200     # Higher limit for product browsing
-          duration: 60
-          algorithm: "token_bucket"
+          expire_s: 300
         timeout:
-          seconds: 15.0
+          seconds: 15
         monitoring:
           log_threshold: 0.3
-    
-    # Admin endpoints - strict rate limiting
-    - pattern: "/api/admin/*"
+    - pattern: /api/admin/*
       features:
-        rate_limit:
-          quota: 10      # Very restrictive for admin operations
-          duration: 60
-          algorithm: "fixed_window"
         timeout:
-          seconds: 30.0  # Longer timeout for admin operations
+          seconds: 30
         retry:
           max_attempts: 2
-          wait: 2.0
+          wait: 2
         monitoring:
-          log_threshold: 0.1  # Log all admin requests >100ms
-    
-    # Search endpoint - aggressive caching due to expensive operation
-    - pattern: "/api/search*"
+          log_threshold: 0.1
+    - pattern: /api/search*
       features:
         cache:
-          expire_s: 1800  # 30 minutes cache for search results
-        rate_limit:
-          quota: 30       # Limit expensive search operations
-          duration: 60
-          algorithm: "leaky_bucket"
-          bucket_size: 10
+          expire_s: 300
         timeout:
-          seconds: 20.0
+          seconds: 20
         retry:
           max_attempts: 2
           wait: 1.5
         monitoring:
           log_threshold: 0.5
-    
-    # Bulk processing - very strict rate limiting
-    - pattern: "/api/bulk/*"
+    - pattern: /api/bulk/*
       features:
-        rate_limit:
-          quota: 5        # Very low limit for bulk operations
-          duration: 60
-          algorithm: "token_bucket"
         timeout:
-          seconds: 60.0   # Long timeout for bulk processing
+          seconds: 60
         retry:
-          max_attempts: 1  # No retries for bulk operations
+          max_attempts: 1
+          wait: 1
         monitoring:
-          log_threshold: 1.0
-    
-    # Slow endpoint - shorter timeout to test timeout handling
-    - pattern: "/api/slow"
+          log_threshold: 1
+    - pattern: /api/slow
       features:
         timeout:
-          seconds: 5.0    # Will timeout for some requests
+          seconds: 5
         retry:
           max_attempts: 2
-          wait: 1.0
+          wait: 1
         monitoring:
-          log_threshold: 3.0
-    
-    # Unreliable endpoint - focus on retry logic
-    - pattern: "/api/unreliable"
+          log_threshold: 3
+    - pattern: /api/unreliable
       features:
-        retry:
-          max_attempts: 5  # More retries for unreliable endpoint
-          wait: 0.5
         timeout:
-          seconds: 10.0
+          seconds: 10
+        retry:
+          max_attempts: 5
+          wait: 0.5
         monitoring:
           log_threshold: 0.1
-  
-  # Default features for all other endpoints
   default_features:
-    timeout:
-      seconds: 10.0
+    cache:
+      expire_s: 300
     rate_limit:
-      quota: 60        # Default 1 request per second
+      quota: 60
       duration: 60
-      algorithm: "sliding_window"
+      algorithm: sliding_window
+    timeout:
+      seconds: 10
+    retry:
+      max_attempts: 3
+      wait: 1
     monitoring:
-      log_threshold: 1.0  # Log requests >1s
+      log_threshold: 1

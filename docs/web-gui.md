@@ -2,10 +2,17 @@
 
 Premier provides a built-in web dashboard for monitoring and managing your API gateway in real-time.
 
+
+
+
+
+
 ## Features
 
 - **Real-time Monitoring** - Live request/response metrics and performance data
+![stats](/docs/images/dashboard_stats.png)
 - **Configuration Management** - View and update gateway configuration
+![config](/docs/images/dashboard_config.png)
 - **Request Analytics** - Detailed request logs and statistics
 - **Cache Management** - Monitor cache hit rates and manage cached data
 - **Rate Limiting Dashboard** - View current rate limits and usage

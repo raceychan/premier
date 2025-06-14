@@ -18,6 +18,8 @@ cd example
 uv run main.py
 ```
 
+![fastapi](/docs/images/fastapi_routes.png)
+
 Visit: http://localhost:8000/premier/dashboard
 
 ## What You'll Learn

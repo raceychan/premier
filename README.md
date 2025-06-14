@@ -4,9 +4,16 @@ Premier is a versatile Python toolkit that can be used in three main ways:
 
 1. **Lightweight Standalone API Gateway** - Run as a dedicated gateway service
 2. **ASGI App/Middleware** - Wrap existing ASGI applications or add as middleware
-3. **Function Resilience Toolbox** - Decorators for cache, retry, timeout, and throttle logic
+3. **Decorator Mode** - Use Premier decorators directly on functions for maximum flexibility
 
 Premier transforms any Python web application into a full-featured API gateway with caching, rate limiting, retry logic, timeouts, and performance monitoring.
+
+## Documentation
+
+- **[Web Dashboard](docs/web-gui.md)** - Real-time monitoring and configuration management
+- **[Examples](docs/examples.md)** - Complete examples and tutorials
+- **[Configuration Guide](docs/configuration.md)** - YAML configuration reference
+
 
 ## Features
 
@@ -16,13 +23,13 @@ Premier provides enterprise-grade API gateway functionality with:
 - **Rate Limiting** - Multiple algorithms (fixed/sliding window, token/leaky bucket), works with distributed app
 - **Retry Logic** - Configurable retry strategies with exponential backoff
 - **Request Timeouts** - Per-path timeout protection
-- **Performance Monitoring** - Request timing and analytics
+- **WebSocket Support** - Full WebSocket proxying with rate limiting and monitoring
 - **Path-Based Policies** - Different features per route with regex matching
-- **Backend Forwarding** - Route requests to multiple backend services
+- **Web Dashboard** - Built-in web GUI for monitoring and configuration management
 - **YAML Configuration** - Declarative configuration with namespace support
-- **Type Safety** - Full type hints and structured configuration
 
 ... and more
+
 
 ## Why Premier
 
@@ -41,7 +48,23 @@ Premier is designed for **simplicity and accessibility** - perfect for simple ap
 
 ### Plugin Mode (Recommended)
 
-Wrap your existing ASGI application:
+**How it works:** Each app instance has its own Premier gateway wrapper
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ App Instance 1                                              │
+│ ┌─────────────────┐    ┌─────────────────────────────────┐  │
+│ │   Premier       │────│       Your ASGI App            │  │
+│ │   Gateway       │    │     (FastAPI/Django/etc)       │  │
+│ │  ┌──────────┐   │    │                                 │  │
+│ │  │Cache     │   │    │  @app.get("/api/users")        │  │
+│ │  │RateLimit │   │    │  async def get_users():         │  │
+│ │  │Retry     │   │    │      return users               │  │
+│ │  │Timeout   │   │    │                                 │  │
+│ │  └──────────┘   │    │                                 │  │
+│ └─────────────────┘    └─────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ```python
 from premier.asgi import ASGIGateway, GatewayConfig
@@ -61,7 +84,31 @@ gateway = ASGIGateway(config, app=app)
 
 ### Standalone Mode
 
-Use as a standalone gateway:
+**How it works:** Single gateway handles all requests and forwards to backend services
+
+```
+                        ┌─────────────────────┐
+    Client Request      │   Premier Gateway   │
+         │              │  ┌──────────────┐   │
+         │              │  │ Cache        │   │
+         └──────────────►  │ RateLimit    │   │
+                        │  │ Retry        │   │
+                        │  │ Timeout      │   │
+                        │  │ Monitoring   │   │
+                        │  └──────────────┘   │
+                        └─────┬──────┬────────┘
+                              │      │
+                    ┌─────────┘      └─────────┐
+                    ▼                          ▼
+            ┌───────────────┐          ┌───────────────┐
+            │   Backend 1   │          │   Backend 2   │
+            │ (Any Service) │          │ (Any Service) │
+            │               │          │               │
+            │ Node.js API   │          │  Python API   │
+            │ Java Service  │          │  .NET Service │
+            │ Static Files  │          │  Database     │
+            └───────────────┘          └───────────────┘
+```
 
 ```python
 from premier.asgi import ASGIGateway, GatewayConfig
@@ -72,6 +119,30 @@ gateway = ASGIGateway(config, servers=["http://backend:8000"])
 
 ```bash
 uvicorn src:main
+```
+
+### Decorator Mode
+
+**How it works:** Apply Premier features directly to individual functions with decorators - no ASGI app required
+
+
+### WebSocket Support
+
+Premier supports WebSocket connections with the same feature set:
+
+```python
+# WebSocket connections are automatically handled
+# Configure WebSocket-specific policies in YAML:
+
+premier:
+  paths:
+    - pattern: "/ws/chat/*"
+      features:
+        rate_limit:
+          quota: 100  # Max 100 connections per minute
+          duration: 60
+        monitoring:
+          log_threshold: 5.0  # Log connections lasting >5s
 ```
 
 ### YAML Configuration
@@ -107,6 +178,15 @@ premier:
           algorithm: "token_bucket"
         timeout:
           seconds: 30.0
+    
+    - pattern: "/ws/*"
+      features:
+        rate_limit:
+          quota: 50
+          duration: 60
+          algorithm: "sliding_window"
+        monitoring:
+          log_threshold: 1.0
   
   default_features:
     timeout:
@@ -210,10 +290,11 @@ if __name__ == "__main__":
 
 ## What's Next
 
-- circuit breaker
-- load balancer
-- web gui
-- mcp
+- [x] web gui
+- [x] websocket support
+- [ ] circuit breaker
+- [ ] load balancer
+- [ ] mcp
 
 
 ## License

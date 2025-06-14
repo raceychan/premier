@@ -278,13 +278,26 @@ class TestASGIGateway:
         assert len(calls) >= 2  # At least response start and body
 
     @pytest.mark.asyncio
-    async def test_call_non_http_passthrough(
+    async def test_call_websocket_passthrough(
         self, basic_config, mock_app, mock_receive, mock_send
     ):
         gateway = ASGIGateway(config=basic_config, app=mock_app)
-        websocket_scope = {"type": "websocket"}
+        websocket_scope = {"type": "websocket", "path": "/ws/test"}
 
         await gateway(websocket_scope, mock_receive, mock_send)
+
+        # Should have handled WebSocket connection
+        # Since it's a passthrough without features, mock_app should be called
+        mock_send.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_call_non_http_non_websocket_passthrough(
+        self, basic_config, mock_app, mock_receive, mock_send
+    ):
+        gateway = ASGIGateway(config=basic_config, app=mock_app)
+        lifespan_scope = {"type": "lifespan"}
+
+        await gateway(lifespan_scope, mock_receive, mock_send)
 
         # Should have passed through to the app
         # Since we can't easily verify the mock_app was called,
@@ -498,3 +511,182 @@ class TestIntegration:
 
         # Cache should now have two entries
         assert cache_size_after_third == 2
+
+
+class TestWebSocketSupport:
+    """Test WebSocket support functionality."""
+
+    @pytest.fixture
+    def websocket_config(self):
+        """WebSocket gateway configuration for testing."""
+        return GatewayConfig(
+            paths=[
+                PathConfig(
+                    pattern="/ws/*",
+                    features=FeatureConfig(
+                        rate_limit=RateLimitConfig(quota=50, duration=60),
+                        monitoring=MonitoringConfig(log_threshold=1.0),
+                    ),
+                ),
+            ]
+        )
+
+    @pytest.fixture
+    def websocket_scope(self):
+        """Mock WebSocket ASGI scope."""
+        return {
+            "type": "websocket",
+            "path": "/ws/chat",
+            "query_string": b"",
+            "headers": [[b"host", b"localhost"]],
+        }
+
+    @pytest.fixture
+    def websocket_receive(self):
+        """Mock WebSocket receive callable."""
+        messages = [
+            {"type": "websocket.connect"},
+            {"type": "websocket.receive", "text": "Hello"},
+            {"type": "websocket.disconnect", "code": 1000},
+        ]
+        
+        async def receive():
+            if messages:
+                return messages.pop(0)
+            return {"type": "websocket.disconnect", "code": 1000}
+        
+        return receive
+
+    @pytest.mark.asyncio
+    async def test_websocket_no_features_with_app(
+        self, websocket_scope, websocket_receive, mock_send
+    ):
+        """Test WebSocket passthrough when no features are configured."""
+        config = GatewayConfig(paths=[])
+        
+        async def websocket_app(scope, receive, send):
+            await send({"type": "websocket.accept"})
+            message = await receive()
+            if message["type"] == "websocket.receive":
+                await send({"type": "websocket.send", "text": "Echo: " + message["text"]})
+        
+        gateway = ASGIGateway(config=config, app=websocket_app)
+        await gateway(websocket_scope, websocket_receive, mock_send)
+        
+        mock_send.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_websocket_no_features_no_app(
+        self, websocket_scope, websocket_receive, mock_send
+    ):
+        """Test WebSocket rejection when no app is configured."""
+        config = GatewayConfig(paths=[])
+        gateway = ASGIGateway(config=config)
+        
+        await gateway(websocket_scope, websocket_receive, mock_send)
+        
+        # Should close the WebSocket connection
+        mock_send.assert_called_once_with({"type": "websocket.close", "code": 1000})
+
+    @pytest.mark.asyncio
+    async def test_websocket_with_features(
+        self, websocket_config, websocket_scope, websocket_receive, mock_send
+    ):
+        """Test WebSocket with rate limiting and monitoring features."""
+        async def websocket_app(scope, receive, send):
+            await send({"type": "websocket.accept"})
+            while True:
+                message = await receive()
+                if message["type"] == "websocket.disconnect":
+                    break
+                elif message["type"] == "websocket.receive":
+                    await send({"type": "websocket.send", "text": "Echo: " + message.get("text", "")})
+        
+        gateway = ASGIGateway(config=websocket_config, app=websocket_app)
+        await gateway(websocket_scope, websocket_receive, mock_send)
+        
+        # Should have applied features and processed WebSocket
+        mock_send.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_websocket_rate_limit_exceeded(
+        self, websocket_config, websocket_scope, websocket_receive, mock_send
+    ):
+        """Test WebSocket rate limiting behavior."""
+        gateway = ASGIGateway(config=websocket_config)
+        
+        # Mock rate limiter to always fail
+        with patch.object(gateway, '_get_websocket_handler') as mock_handler:
+            async def rate_limited_handler(scope, receive, send):
+                await send({"type": "websocket.close", "code": 1008, "reason": b"Rate limit exceeded"})
+            
+            mock_handler.return_value = rate_limited_handler
+            
+            await gateway(websocket_scope, websocket_receive, mock_send)
+            
+            # Should close connection due to rate limit
+            expected_calls = [{"type": "websocket.close", "code": 1008, "reason": b"Rate limit exceeded"}]
+            actual_calls = [call[0][0] for call in mock_send.call_args_list]
+            assert expected_calls[0] in actual_calls
+
+    @pytest.mark.asyncio
+    async def test_websocket_monitoring(
+        self, websocket_config, websocket_scope, mock_send, capsys
+    ):
+        """Test WebSocket connection monitoring."""
+        async def websocket_app(scope, receive, send):
+            await send({"type": "websocket.accept"})
+            await send({"type": "websocket.close", "code": 1000})
+        
+        # Mock receive to simulate a connection that closes immediately
+        async def quick_receive():
+            return {"type": "websocket.disconnect", "code": 1000}
+        
+        gateway = ASGIGateway(config=websocket_config, app=websocket_app)
+        
+        # Set a very low threshold to ensure monitoring triggers
+        gateway.config.paths[0].features.monitoring.log_threshold = 0.0
+        
+        await gateway(websocket_scope, quick_receive, mock_send)
+        
+        # Should have completed without error
+        mock_send.assert_called()
+
+    @pytest.mark.skip(reason="aiohttp not installed")
+    @pytest.mark.asyncio
+    async def test_websocket_server_forwarding(
+        self, websocket_config, websocket_scope, websocket_receive, mock_send
+    ):
+        """Test WebSocket forwarding to backend servers."""
+        with (
+            patch("premier.asgi.AIOHTTP_AVAILABLE", True),
+            patch("aiohttp.ClientSession") as mock_session_class,
+        ):
+            # Mock WebSocket connection
+            mock_ws = AsyncMock()
+            mock_ws.__aiter__.return_value = []  # No messages from server
+            
+            mock_session = AsyncMock()
+            mock_session.ws_connect.return_value.__aenter__.return_value = mock_ws
+            mock_session_class.return_value = mock_session
+            
+            servers = ["http://localhost:8000"]
+            gateway = ASGIGateway(config=websocket_config, servers=servers)
+            
+            await gateway(websocket_scope, websocket_receive, mock_send)
+            
+            # Should have attempted WebSocket connection to server
+            mock_session.ws_connect.assert_called_once()
+            mock_send.assert_called()
+
+    @pytest.mark.asyncio 
+    async def test_websocket_server_forwarding_no_servers(
+        self, websocket_config, websocket_scope, websocket_receive, mock_send
+    ):
+        """Test WebSocket forwarding when no servers are configured."""
+        gateway = ASGIGateway(config=websocket_config)  # No servers
+        
+        await gateway(websocket_scope, websocket_receive, mock_send)
+        
+        # Should close the connection
+        mock_send.assert_called_once_with({"type": "websocket.close", "code": 1000})

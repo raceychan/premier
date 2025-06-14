@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premier API Gateway Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 600;
+        }
+
+        .header p {
+            opacity: 0.9;
+            margin-top: 0.5rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-left: 4px solid #2563eb;
+        }
+
+        .stat-card h3 {
+            color: #666;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .stat-card .change {
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+        }
+
+        .change.positive { color: #10b981; }
+        .change.negative { color: #ef4444; }
+
+        .dashboard-section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+
+        .section-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .section-header h2 {
+            color: #374151;
+            font-size: 1.25rem;
+        }
+
+        .section-content {
+            padding: 1.5rem;
+        }
+
+        .config-editor {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            min-height: 400px;
+            resize: vertical;
+        }
+
+        .config-form {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .form-section {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .form-section h3 {
+            margin-bottom: 1rem;
+            color: #1f2937;
+            font-size: 1.1rem;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 0.5rem;
+        }
+
+        .path-config {
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            background: #f9fafb;
+            overflow: hidden;
+        }
+
+        .path-config-header {
+            padding: 1rem;
+            background: #f3f4f6;
+            border-bottom: 1px solid #e5e7eb;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background-color 0.2s;
+        }
+
+        .path-config-header:hover {
+            background: #e5e7eb;
+        }
+
+        .path-config-header h4 {
+            margin: 0;
+            color: #374151;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .path-config-content {
+            padding: 1rem;
+            display: none;
+        }
+
+        .path-config.expanded .path-config-content {
+            display: block;
+        }
+
+        .expand-icon {
+            transition: transform 0.2s;
+            font-size: 0.8rem;
+            color: #6b7280;
+        }
+
+        .path-config.expanded .expand-icon {
+            transform: rotate(90deg);
+        }
+
+        .path-pattern-preview {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: #e5e7eb;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            color: #6b7280;
+        }
+
+        .remove-path {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+
+        .remove-path:hover {
+            background: #dc2626;
+        }
+
+        .add-path {
+            background: #059669;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-bottom: 1rem;
+        }
+
+        .add-path:hover {
+            background: #047857;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .form-row-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+        }
+
+        .feature-section {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .feature-section h5 {
+            margin-bottom: 0.75rem;
+            color: #475569;
+            font-size: 0.95rem;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .modal-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f9fafb;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: #374151;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #6b7280;
+            padding: 0;
+            width: 2rem;
+            height: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+        }
+
+        .modal-close:hover {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .modal-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: flex-end;
+            background: #f9fafb;
+        }
+
+        .yaml-display {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            margin: 0;
+            color: #374151;
+        }
+
+        .yaml-view-btn {
+            background: transparent;
+            color: #6b7280;
+            border: 1px solid #d1d5db;
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .yaml-view-btn:hover {
+            background: #f9fafb;
+            color: #374151;
+            border-color: #9ca3af;
+        }
+
+        @media (max-width: 768px) {
+            .form-row,
+            .form-row-3 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .table th,
+        .table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .table th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .table tbody tr:hover {
+            background: #f9fafb;
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .status-active {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-inactive {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .refresh-btn {
+            float: right;
+            background: #10b981;
+        }
+
+        .refresh-btn:hover {
+            background: #059669;
+        }
+
+        .config-actions {
+            margin-top: 1rem;
+            display: flex;
+            gap: 1rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 1rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .config-actions {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Premier API Gateway</h1>
+        <p>Real-time monitoring and configuration dashboard</p>
+    </div>
+
+    <div class="container">
+        <!-- Stats Overview -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Requests</h3>
+                <div class="value" id="total-requests">0</div>
+                <div class="change positive" id="requests-change">+0% from last hour</div>
+            </div>
+            <div class="stat-card">
+                <h3>Cache Hit Rate</h3>
+                <div class="value" id="cache-hit-rate">0%</div>
+                <div class="change positive" id="cache-change">+0% from last hour</div>
+            </div>
+            <div class="stat-card">
+                <h3>Rate Limited</h3>
+                <div class="value" id="rate-limited">0</div>
+                <div class="change negative" id="rate-limit-change">+0% from last hour</div>
+            </div>
+            <div class="stat-card">
+                <h3>Avg Response Time</h3>
+                <div class="value" id="avg-response-time">0ms</div>
+                <div class="change positive" id="response-time-change">-0% from last hour</div>
+            </div>
+        </div>
+
+        <!-- Recent Requests -->
+        <div class="dashboard-section">
+            <div class="section-header">
+                <h2>Recent Requests</h2>
+                <button class="btn refresh-btn" onclick="refreshStats()">Refresh</button>
+            </div>
+            <div class="section-content">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Method</th>
+                            <th>Path</th>
+                            <th>Status</th>
+                            <th>Response Time</th>
+                            <th>Cache</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-requests">
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: #6b7280;">No recent requests</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Active Policies -->
+        <div class="dashboard-section">
+            <div class="section-header">
+                <h2>Active Policies</h2>
+            </div>
+            <div class="section-content">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Path Pattern</th>
+                            <th>Features</th>
+                            <th>Status</th>
+                            <th>Requests</th>
+                        </tr>
+                    </thead>
+                    <tbody id="active-policies">
+                        <tr>
+                            <td colspan="4" style="text-align: center; color: #6b7280;">Loading policies...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Configuration Editor -->
+        <div class="dashboard-section">
+            <div class="section-header">
+                <h2>Configuration</h2>
+                <button class="yaml-view-btn" onclick="viewYamlModal()">View in YAML</button>
+            </div>
+            <div class="section-content">
+                <!-- Form View -->
+                <div class="config-form" id="config-form">
+                    <div class="form-section">
+                        <h3>General Settings</h3>
+                        <div class="form-group">
+                            <label for="keyspace">Keyspace</label>
+                            <input type="text" id="keyspace" placeholder="e.g., my-api-gateway" />
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Path Configurations</h3>
+                        <div id="path-configs"></div>
+                        <button class="add-path" onclick="addPathConfig()">+ Add Path</button>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Default Features</h3>
+                        <div id="default-features"></div>
+                    </div>
+                </div>
+                
+                <div class="config-actions">
+                    <button class="btn" onclick="saveConfig()">Save Configuration</button>
+                    <button class="btn btn-secondary" onclick="reloadConfig()">Reload from File</button>
+                    <button class="btn btn-secondary" onclick="validateConfig()">Validate</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- YAML Modal -->
+        <div id="yaml-modal" class="modal" onclick="closeYamlModal()">
+            <div class="modal-content" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h3>Configuration (YAML View)</h3>
+                    <button class="modal-close" onclick="closeYamlModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <pre id="yaml-display" class="yaml-display"></pre>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeYamlModal()">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dashboard JavaScript functionality
+        let statsInterval;
+        let configData = {};
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDashboard();
+            startAutoRefresh();
+        });
+
+        async function loadDashboard() {
+            await Promise.all([
+                refreshStats(),
+                loadPolicies(),
+                loadConfig()
+            ]);
+        }
+
+        // YAML Modal functions
+        function viewYamlModal() {
+            const formData = collectFormData();
+            const yamlString = convertToYaml(formData);
+            document.getElementById('yaml-display').textContent = yamlString;
+            document.getElementById('yaml-modal').style.display = 'block';
+        }
+
+        function closeYamlModal() {
+            document.getElementById('yaml-modal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeYamlModal();
+            }
+        });
+
+        // Feature generation functions
+        function createFeatureSection(features = {}, containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            
+            // For default features, create collapsible sections like paths
+            if (containerId === 'default-features') {
+                createCollapsibleFeatures(features, containerId);
+            } else {
+                // For path features, use the original checkbox approach
+                createCheckboxFeatures(features, containerId);
+            }
+        }
+
+        function createCollapsibleFeatures(features = {}, containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            
+            const featureTypes = ['cache', 'rate_limit', 'timeout', 'retry', 'monitoring'];
+            
+            container.innerHTML = featureTypes.map(featureType => {
+                const featureConfig = features[featureType] || {};
+                const hasFeature = Object.keys(featureConfig).length > 0;
+                const featureId = `${containerId}-${featureType}`;
+                
+                let featureName = featureType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                
+                return `
+                    <div class="path-config" ${hasFeature ? 'style="display: block;"' : 'style="display: block;"'}>
+                        <div class="path-config-header" onclick="toggleFeatureConfig(this)">
+                            <h4>
+                                <span class="expand-icon">▶</span>
+                                <span>${featureName}</span>
+                            </h4>
+                            <button class="remove-path" onclick="removeFeatureConfig(event, this)" style="display: ${hasFeature ? 'block' : 'none'};">Remove</button>
+                        </div>
+                        <div class="path-config-content">
+                            ${generateFeatureForm(featureType, featureConfig, featureId)}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Add button to add new features
+            const addButton = document.createElement('button');
+            addButton.className = 'add-path';
+            addButton.textContent = '+ Add Feature';
+            addButton.onclick = () => addDefaultFeature(containerId);
+            container.appendChild(addButton);
+        }
+
+        function createCheckboxFeatures(features = {}, containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            
+            container.innerHTML = `
+                <div class="checkbox-group">
+                    <input type="checkbox" id="${containerId}-cache" onchange="toggleFeature('${containerId}', 'cache')" ${features.cache ? 'checked' : ''}>
+                    <label for="${containerId}-cache">Cache</label>
+                </div>
+                <div class="feature-section" id="${containerId}-cache-section" style="display: ${features.cache ? 'block' : 'none'}">
+                    <h5>Cache Configuration</h5>
+                    <div class="form-group">
+                        <label>Expire Seconds</label>
+                        <input type="number" id="${containerId}-cache-expire" value="${features.cache?.expire_s || 300}" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Cache Key (optional)</label>
+                        <input type="text" id="${containerId}-cache-key" value="${features.cache?.cache_key || ''}" placeholder="Custom cache key">
+                    </div>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="${containerId}-rate-limit" onchange="toggleFeature('${containerId}', 'rate_limit')" ${features.rate_limit ? 'checked' : ''}>
+                    <label for="${containerId}-rate-limit">Rate Limit</label>
+                </div>
+                <div class="feature-section" id="${containerId}-rate-limit-section" style="display: ${features.rate_limit ? 'block' : 'none'}">
+                    <h5>Rate Limit Configuration</h5>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Quota</label>
+                            <input type="number" id="${containerId}-rate-limit-quota" value="${features.rate_limit?.quota || 100}" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Duration (seconds)</label>
+                            <input type="number" id="${containerId}-rate-limit-duration" value="${features.rate_limit?.duration || 60}" min="1">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Algorithm</label>
+                            <select id="${containerId}-rate-limit-algorithm">
+                                <option value="fixed_window" ${features.rate_limit?.algorithm === 'fixed_window' ? 'selected' : ''}>Fixed Window</option>
+                                <option value="sliding_window" ${features.rate_limit?.algorithm === 'sliding_window' ? 'selected' : ''}>Sliding Window</option>
+                                <option value="token_bucket" ${features.rate_limit?.algorithm === 'token_bucket' ? 'selected' : ''}>Token Bucket</option>
+                                <option value="leaky_bucket" ${features.rate_limit?.algorithm === 'leaky_bucket' ? 'selected' : ''}>Leaky Bucket</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Bucket Size (for bucket algorithms)</label>
+                            <input type="number" id="${containerId}-rate-limit-bucket-size" value="${features.rate_limit?.bucket_size || ''}" min="1" placeholder="Optional">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="${containerId}-timeout" onchange="toggleFeature('${containerId}', 'timeout')" ${features.timeout ? 'checked' : ''}>
+                    <label for="${containerId}-timeout">Timeout</label>
+                </div>
+                <div class="feature-section" id="${containerId}-timeout-section" style="display: ${features.timeout ? 'block' : 'none'}">
+                    <h5>Timeout Configuration</h5>
+                    <div class="form-group">
+                        <label>Timeout Seconds</label>
+                        <input type="number" id="${containerId}-timeout-seconds" value="${features.timeout?.seconds || 10}" min="0.1" step="0.1">
+                    </div>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="${containerId}-retry" onchange="toggleFeature('${containerId}', 'retry')" ${features.retry ? 'checked' : ''}>
+                    <label for="${containerId}-retry">Retry</label>
+                </div>
+                <div class="feature-section" id="${containerId}-retry-section" style="display: ${features.retry ? 'block' : 'none'}">
+                    <h5>Retry Configuration</h5>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Max Attempts</label>
+                            <input type="number" id="${containerId}-retry-max-attempts" value="${features.retry?.max_attempts || 3}" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Wait Time (seconds)</label>
+                            <input type="number" id="${containerId}-retry-wait" value="${features.retry?.wait || 1}" min="0.1" step="0.1">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="${containerId}-monitoring" onchange="toggleFeature('${containerId}', 'monitoring')" ${features.monitoring ? 'checked' : ''}>
+                    <label for="${containerId}-monitoring">Monitoring</label>
+                </div>
+                <div class="feature-section" id="${containerId}-monitoring-section" style="display: ${features.monitoring ? 'block' : 'none'}">
+                    <h5>Monitoring Configuration</h5>
+                    <div class="form-group">
+                        <label>Log Threshold (seconds)</label>
+                        <input type="number" id="${containerId}-monitoring-log-threshold" value="${features.monitoring?.log_threshold || 0.1}" min="0.01" step="0.01">
+                    </div>
+                </div>
+            `;
+        }
+
+        function generateFeatureForm(featureType, featureConfig, featureId) {
+            switch (featureType) {
+                case 'cache':
+                    return `
+                        <div class="form-group">
+                            <label>Expire Seconds</label>
+                            <input type="number" id="${featureId}-expire-s" value="${featureConfig.expire_s || 300}" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Cache Key (optional)</label>
+                            <input type="text" id="${featureId}-cache-key" value="${featureConfig.cache_key || ''}" placeholder="Custom cache key">
+                        </div>
+                    `;
+                case 'rate_limit':
+                    return `
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Quota</label>
+                                <input type="number" id="${featureId}-quota" value="${featureConfig.quota || 100}" min="1">
+                            </div>
+                            <div class="form-group">
+                                <label>Duration (seconds)</label>
+                                <input type="number" id="${featureId}-duration" value="${featureConfig.duration || 60}" min="1">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Algorithm</label>
+                                <select id="${featureId}-algorithm">
+                                    <option value="fixed_window" ${featureConfig.algorithm === 'fixed_window' ? 'selected' : ''}>Fixed Window</option>
+                                    <option value="sliding_window" ${featureConfig.algorithm === 'sliding_window' ? 'selected' : ''}>Sliding Window</option>
+                                    <option value="token_bucket" ${featureConfig.algorithm === 'token_bucket' ? 'selected' : ''}>Token Bucket</option>
+                                    <option value="leaky_bucket" ${featureConfig.algorithm === 'leaky_bucket' ? 'selected' : ''}>Leaky Bucket</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Bucket Size (optional)</label>
+                                <input type="number" id="${featureId}-bucket-size" value="${featureConfig.bucket_size || ''}" min="1" placeholder="Optional">
+                            </div>
+                        </div>
+                    `;
+                case 'timeout':
+                    return `
+                        <div class="form-group">
+                            <label>Timeout Seconds</label>
+                            <input type="number" id="${featureId}-seconds" value="${featureConfig.seconds || 10}" min="0.1" step="0.1">
+                        </div>
+                    `;
+                case 'retry':
+                    return `
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Max Attempts</label>
+                                <input type="number" id="${featureId}-max-attempts" value="${featureConfig.max_attempts || 3}" min="1">
+                            </div>
+                            <div class="form-group">
+                                <label>Wait Time (seconds)</label>
+                                <input type="number" id="${featureId}-wait" value="${featureConfig.wait || 1}" min="0.1" step="0.1">
+                            </div>
+                        </div>
+                    `;
+                case 'monitoring':
+                    return `
+                        <div class="form-group">
+                            <label>Log Threshold (seconds)</label>
+                            <input type="number" id="${featureId}-log-threshold" value="${featureConfig.log_threshold || 0.1}" min="0.01" step="0.01">
+                        </div>
+                    `;
+                default:
+                    return '';
+            }
+        }
+
+        function toggleFeatureConfig(header) {
+            const featureConfig = header.closest('.path-config');
+            featureConfig.classList.toggle('expanded');
+        }
+
+        function removeFeatureConfig(event, button) {
+            event.stopPropagation();
+            const featureConfig = button.closest('.path-config');
+            const removeBtn = featureConfig.querySelector('.remove-path');
+            removeBtn.style.display = 'none';
+            
+            // Clear all form fields in this feature
+            const inputs = featureConfig.querySelectorAll('input, select');
+            inputs.forEach(input => {
+                if (input.type === 'number') {
+                    input.value = '';
+                } else {
+                    input.value = '';
+                }
+            });
+        }
+
+        function toggleFeature(containerId, featureType) {
+            const checkbox = document.getElementById(`${containerId}-${featureType}`);
+            const section = document.getElementById(`${containerId}-${featureType}-section`);
+            section.style.display = checkbox.checked ? 'block' : 'none';
+        }
+
+        function addPathConfig() {
+            const container = document.getElementById('path-configs');
+            const pathIndex = container.children.length;
+            const pathId = `path-${pathIndex}`;
+            
+            const pathDiv = document.createElement('div');
+            pathDiv.className = 'path-config';
+            pathDiv.innerHTML = `
+                <div class="path-config-header" onclick="togglePathConfig(this)">
+                    <h4>
+                        <span class="expand-icon">▶</span>
+                        <span id="${pathId}-preview">No pattern set</span>
+                    </h4>
+                    <button class="remove-path" onclick="removePathConfig(event, this)">Remove</button>
+                </div>
+                <div class="path-config-content">
+                    <div class="form-group">
+                        <label>Pattern</label>
+                        <input type="text" id="${pathId}-pattern" placeholder="e.g., /api/users/*" onchange="updatePathPreview('${pathId}')" />
+                    </div>
+                    <div id="${pathId}-features"></div>
+                </div>
+            `;
+            
+            container.appendChild(pathDiv);
+            createFeatureSection({}, `${pathId}-features`);
+        }
+
+        function togglePathConfig(header) {
+            const pathConfig = header.closest('.path-config');
+            pathConfig.classList.toggle('expanded');
+        }
+
+        function updatePathPreview(pathId) {
+            const patternInput = document.getElementById(`${pathId}-pattern`);
+            const preview = document.getElementById(`${pathId}-preview`);
+            const pattern = patternInput.value.trim();
+            preview.textContent = pattern || 'No pattern set';
+        }
+
+        function removePathConfig(event, button) {
+            event.stopPropagation(); // Prevent triggering the expand/collapse
+            button.closest('.path-config').remove();
+        }
+
+
+        function populateForm(data) {
+            if (!data.premier) return;
+            
+            const premier = data.premier;
+            
+            // Set keyspace
+            document.getElementById('keyspace').value = premier.keyspace || '';
+            
+            // Clear existing paths
+            document.getElementById('path-configs').innerHTML = '';
+            
+            // Add paths
+            if (premier.paths) {
+                premier.paths.forEach((pathConfig, index) => {
+                    addPathConfig();
+                    const pathId = `path-${index}`;
+                    const patternInput = document.getElementById(`${pathId}-pattern`);
+                    patternInput.value = pathConfig.pattern || '';
+                    
+                    // Update the pattern preview
+                    updatePathPreview(pathId);
+                    
+                    // Populate features for this path
+                    if (pathConfig.features) {
+                        populateFeatures(`${pathId}-features`, pathConfig.features);
+                    }
+                });
+            }
+            
+            // Populate default features
+            if (premier.default_features) {
+                createFeatureSection(premier.default_features, 'default-features');
+                populateFeatures('default-features', premier.default_features);
+            } else {
+                createFeatureSection({}, 'default-features');
+            }
+        }
+
+        function populateFeatures(containerId, features) {
+            // Check feature checkboxes and populate values
+            Object.keys(features).forEach(featureType => {
+                const checkbox = document.getElementById(`${containerId}-${featureType}`);
+                if (checkbox) {
+                    checkbox.checked = true;
+                    toggleFeature(containerId, featureType);
+                    
+                    const featureConfig = features[featureType];
+                    
+                    // Populate specific feature fields
+                    Object.keys(featureConfig).forEach(key => {
+                        const input = document.getElementById(`${containerId}-${featureType}-${key.replace('_', '-')}`);
+                        if (input) {
+                            input.value = featureConfig[key];
+                        }
+                    });
+                }
+            });
+        }
+
+        function updateYamlFromForm() {
+            const formData = collectFormData();
+            const yamlString = convertToYaml(formData);
+            document.getElementById('config-editor').value = yamlString;
+        }
+
+        function collectFormData() {
+            const data = {
+                premier: {
+                    keyspace: document.getElementById('keyspace').value || 'asgi-gateway',
+                    paths: [],
+                    default_features: {}
+                }
+            };
+            
+            // Collect path configurations
+            const pathConfigs = document.querySelectorAll('.path-config');
+            pathConfigs.forEach((pathDiv, index) => {
+                const pathId = `path-${index}`;
+                const pattern = document.getElementById(`${pathId}-pattern`).value;
+                
+                if (pattern) {
+                    const pathConfig = {
+                        pattern: pattern,
+                        features: collectFeatures(`${pathId}-features`)
+                    };
+                    
+                    if (Object.keys(pathConfig.features).length > 0) {
+                        data.premier.paths.push(pathConfig);
+                    }
+                }
+            });
+            
+            // Collect default features
+            data.premier.default_features = collectFeatures('default-features');
+            
+            return data;
+        }
+
+        function collectFeatures(containerId) {
+            const features = {};
+            
+            // Handle default features (collapsible) vs path features (checkbox)
+            if (containerId === 'default-features') {
+                return collectCollapsibleFeatures(containerId);
+            } else {
+                return collectCheckboxFeatures(containerId);
+            }
+        }
+
+        function collectCollapsibleFeatures(containerId) {
+            const features = {};
+            
+            ['cache', 'rate_limit', 'timeout', 'retry', 'monitoring'].forEach(featureType => {
+                const feature = {};
+                const featureId = `${containerId}-${featureType}`;
+                
+                if (featureType === 'cache') {
+                    const expireInput = document.getElementById(`${featureId}-expire-s`);
+                    const keyInput = document.getElementById(`${featureId}-cache-key`);
+                    if (expireInput && expireInput.value) feature.expire_s = parseInt(expireInput.value);
+                    if (keyInput && keyInput.value) feature.cache_key = keyInput.value;
+                }
+                
+                else if (featureType === 'rate_limit') {
+                    const quotaInput = document.getElementById(`${featureId}-quota`);
+                    const durationInput = document.getElementById(`${featureId}-duration`);
+                    const algorithmInput = document.getElementById(`${featureId}-algorithm`);
+                    const bucketSizeInput = document.getElementById(`${featureId}-bucket-size`);
+                    
+                    if (quotaInput && quotaInput.value) feature.quota = parseInt(quotaInput.value);
+                    if (durationInput && durationInput.value) feature.duration = parseInt(durationInput.value);
+                    if (algorithmInput && algorithmInput.value) feature.algorithm = algorithmInput.value;
+                    if (bucketSizeInput && bucketSizeInput.value) feature.bucket_size = parseInt(bucketSizeInput.value);
+                }
+                
+                else if (featureType === 'timeout') {
+                    const secondsInput = document.getElementById(`${featureId}-seconds`);
+                    if (secondsInput && secondsInput.value) feature.seconds = parseFloat(secondsInput.value);
+                }
+                
+                else if (featureType === 'retry') {
+                    const maxAttemptsInput = document.getElementById(`${featureId}-max-attempts`);
+                    const waitInput = document.getElementById(`${featureId}-wait`);
+                    if (maxAttemptsInput && maxAttemptsInput.value) feature.max_attempts = parseInt(maxAttemptsInput.value);
+                    if (waitInput && waitInput.value) feature.wait = parseFloat(waitInput.value);
+                }
+                
+                else if (featureType === 'monitoring') {
+                    const logThresholdInput = document.getElementById(`${featureId}-log-threshold`);
+                    if (logThresholdInput && logThresholdInput.value) feature.log_threshold = parseFloat(logThresholdInput.value);
+                }
+                
+                if (Object.keys(feature).length > 0) {
+                    features[featureType] = feature;
+                }
+            });
+            
+            return features;
+        }
+
+        function collectCheckboxFeatures(containerId) {
+            const features = {};
+            
+            ['cache', 'rate_limit', 'timeout', 'retry', 'monitoring'].forEach(featureType => {
+                const checkbox = document.getElementById(`${containerId}-${featureType}`);
+                if (checkbox && checkbox.checked) {
+                    const feature = {};
+                    
+                    if (featureType === 'cache') {
+                        const expire = document.getElementById(`${containerId}-cache-expire`).value;
+                        const key = document.getElementById(`${containerId}-cache-key`).value;
+                        if (expire) feature.expire_s = parseInt(expire);
+                        if (key) feature.cache_key = key;
+                    }
+                    
+                    else if (featureType === 'rate_limit') {
+                        const quota = document.getElementById(`${containerId}-rate-limit-quota`).value;
+                        const duration = document.getElementById(`${containerId}-rate-limit-duration`).value;
+                        const algorithm = document.getElementById(`${containerId}-rate-limit-algorithm`).value;
+                        const bucketSize = document.getElementById(`${containerId}-rate-limit-bucket-size`).value;
+                        
+                        if (quota) feature.quota = parseInt(quota);
+                        if (duration) feature.duration = parseInt(duration);
+                        if (algorithm) feature.algorithm = algorithm;
+                        if (bucketSize) feature.bucket_size = parseInt(bucketSize);
+                    }
+                    
+                    else if (featureType === 'timeout') {
+                        const seconds = document.getElementById(`${containerId}-timeout-seconds`).value;
+                        if (seconds) feature.seconds = parseFloat(seconds);
+                    }
+                    
+                    else if (featureType === 'retry') {
+                        const maxAttempts = document.getElementById(`${containerId}-retry-max-attempts`).value;
+                        const wait = document.getElementById(`${containerId}-retry-wait`).value;
+                        if (maxAttempts) feature.max_attempts = parseInt(maxAttempts);
+                        if (wait) feature.wait = parseFloat(wait);
+                    }
+                    
+                    else if (featureType === 'monitoring') {
+                        const logThreshold = document.getElementById(`${containerId}-monitoring-log-threshold`).value;
+                        if (logThreshold) feature.log_threshold = parseFloat(logThreshold);
+                    }
+                    
+                    if (Object.keys(feature).length > 0) {
+                        features[featureType] = feature;
+                    }
+                }
+            });
+            
+            return features;
+        }
+
+        function convertToYaml(data) {
+            try {
+                return jsyaml.dump(data, {
+                    indent: 2,
+                    lineWidth: 80,
+                    noRefs: true,
+                    sortKeys: false
+                });
+            } catch (error) {
+                console.error('YAML conversion error:', error);
+                return 'premier:\n  keyspace: "asgi-gateway"\n';
+            }
+        }
+
+        async function refreshStats() {
+            try {
+                const response = await fetch('/premier/dashboard/api/stats');
+                const stats = await response.json();
+                
+                document.getElementById('total-requests').textContent = stats.total_requests || 0;
+                document.getElementById('cache-hit-rate').textContent = (stats.cache_hit_rate || 0) + '%';
+                document.getElementById('rate-limited').textContent = stats.rate_limited || 0;
+                document.getElementById('avg-response-time').textContent = (stats.avg_response_time || 0) + 'ms';
+                
+                // Update recent requests table
+                const tbody = document.getElementById('recent-requests');
+                if (stats.recent_requests && stats.recent_requests.length > 0) {
+                    tbody.innerHTML = stats.recent_requests.map(req => `
+                        <tr>
+                            <td>${new Date(req.timestamp).toLocaleTimeString()}</td>
+                            <td>${req.method}</td>
+                            <td>${req.path}</td>
+                            <td>${req.status}</td>
+                            <td>${req.response_time}ms</td>
+                            <td>${req.cache_hit ? 'HIT' : 'MISS'}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #6b7280;">No recent requests</td></tr>';
+                }
+            } catch (error) {
+                console.error('Failed to refresh stats:', error);
+            }
+        }
+
+        async function loadPolicies() {
+            try {
+                const response = await fetch('/premier/dashboard/api/policies');
+                const policies = await response.json();
+                
+                const tbody = document.getElementById('active-policies');
+                if (policies && policies.length > 0) {
+                    tbody.innerHTML = policies.map(policy => `
+                        <tr>
+                            <td>${policy.pattern}</td>
+                            <td>${policy.features.join(', ')}</td>
+                            <td><span class="status-badge status-active">Active</span></td>
+                            <td>${policy.request_count || 0}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #6b7280;">No active policies</td></tr>';
+                }
+            } catch (error) {
+                console.error('Failed to load policies:', error);
+            }
+        }
+
+        async function loadConfig() {
+            try {
+                const response = await fetch('/premier/dashboard/api/config');
+                const config = await response.text();
+                
+                // Parse YAML and store for form view
+                try {
+                    configData = parseYaml(config);
+                    console.log('Parsed config data:', configData);
+                    
+                    // Initialize default features section
+                    createFeatureSection({}, 'default-features');
+                    
+                    // Populate the form with loaded data
+                    if (configData && configData.premier) {
+                        console.log('Populating form with config data');
+                        populateForm(configData);
+                    } else {
+                        console.log('No premier config found in data');
+                    }
+                } catch (parseError) {
+                    console.error('Failed to parse YAML:', parseError);
+                }
+            } catch (error) {
+                console.error('Failed to load config:', error);
+            }
+        }
+
+        function parseYaml(yamlString) {
+            try {
+                const result = jsyaml.load(yamlString);
+                return result || { premier: { paths: [], default_features: {} } };
+            } catch (error) {
+                console.error('YAML parsing error:', error);
+                return { premier: { paths: [], default_features: {} } };
+            }
+        }
+
+        async function saveConfig() {
+            // Convert form data to YAML
+            const formData = collectFormData();
+            const config = convertToYaml(formData);
+            
+            try {
+                const response = await fetch('/premier/dashboard/api/config', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: config
+                });
+                
+                if (response.ok) {
+                    alert('Configuration saved successfully!');
+                    // Update our stored config data
+                    configData = parseYaml(config);
+                    await loadPolicies(); // Refresh policies after config change
+                } else {
+                    const error = await response.text();
+                    alert('Failed to save configuration: ' + error);
+                }
+            } catch (error) {
+                console.error('Failed to save config:', error);
+                alert('Failed to save configuration: ' + error.message);
+            }
+        }
+
+        async function reloadConfig() {
+            await loadConfig();
+            await loadPolicies();
+        }
+
+        async function validateConfig() {
+            // Convert form data to YAML for validation
+            const formData = collectFormData();
+            const config = convertToYaml(formData);
+            
+            try {
+                const response = await fetch('/premier/dashboard/api/config/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: config
+                });
+                
+                const result = await response.json();
+                if (result.valid) {
+                    alert('Configuration is valid!');
+                } else {
+                    alert('Configuration is invalid: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Failed to validate config:', error);
+                alert('Failed to validate configuration: ' + error.message);
+            }
+        }
+
+        function startAutoRefresh() {
+            statsInterval = setInterval(refreshStats, 30000); // Refresh every 30 seconds
+        }
+
+        function stopAutoRefresh() {
+            if (statsInterval) {
+                clearInterval(statsInterval);
+            }
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', stopAutoRefresh);
+    </script>
+</body>
+</html>

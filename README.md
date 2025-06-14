@@ -1,6 +1,12 @@
 # Premier
 
-A production-ready ASGI API Gateway that transforms any Python web application into a full-featured API gateway with caching, rate limiting, retry logic, timeouts, and performance monitoring.
+Premier is a versatile Python toolkit that can be used in three main ways:
+
+1. **Lightweight Standalone API Gateway** - Run as a dedicated gateway service
+2. **ASGI App/Middleware** - Wrap existing ASGI applications or add as middleware
+3. **Function Resilience Toolbox** - Decorators for cache, retry, timeout, and throttle logic
+
+Premier transforms any Python web application into a full-featured API gateway with caching, rate limiting, retry logic, timeouts, and performance monitoring.
 
 ## Features
 
@@ -31,6 +37,7 @@ Premier is designed for **simplicity and accessibility** - perfect for simple ap
 - **Hot Reloadable** - Update configurations without restarts
 
 ## Quick Start
+
 
 ### Plugin Mode (Recommended)
 
@@ -119,6 +126,35 @@ For Redis support (optional):
 pip install premier[redis]
 ```
 
+## Function Resilience Decorators
+
+Premier includes powerful decorators for adding resilience to individual functions:
+
+### Retry Decorator
+
+```python
+from premier.retry import retry
+
+@retry(max_attempts=3, wait=1.0, exceptions=(ConnectionError, TimeoutError))
+async def api_call():
+    # Your function with retry logic
+    return await make_request()
+```
+
+### Timer Decorator
+
+```python
+from premier.timer import timeit, timeout
+
+@timeit(log_threshold=0.1)  # Log calls taking >0.1s
+async def slow_operation():
+    return await heavy_computation()
+
+@timeout(seconds=5)  # Timeout after 5 seconds
+async def time_limited_task():
+    return await long_running_operation()
+```
+
 ## Framework Integration
 
 Works with any ASGI framework:
@@ -171,6 +207,14 @@ if __name__ == "__main__":
 - Redis >= 5.0.3 (optional, for distributed deployments)
 - PyYAML (for YAML configuration)
 - aiohttp (optional, for standalone mode)
+
+## What's Next
+
+- circuit breaker
+- load balancer
+- web gui
+- mcp
+
 
 ## License
 

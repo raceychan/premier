@@ -17,16 +17,20 @@ from .timer import ILogger
 @dataclass
 class CacheConfig:
     """Cache configuration based on cache.py parameters."""
+
     expire_s: Optional[int] = None
     cache_key: Optional[Union[str, Callable[..., str]]] = None
     encoder: Optional[Callable[[Any], Any]] = None
 
 
-@dataclass 
+@dataclass
 class RetryConfig:
     """Retry configuration based on retry.py parameters."""
+
     max_attempts: int = 3
-    wait: Union[float, int, List[Union[float, int]], Callable[[int], Union[float, int]]] = 1.0
+    wait: Union[
+        float, int, List[Union[float, int]], Callable[[int], Union[float, int]]
+    ] = 1.0
     exceptions: tuple[type[Exception], ...] = (Exception,)
     on_fail: Optional[Callable] = None
     logger: Optional[ILogger] = None
@@ -35,6 +39,7 @@ class RetryConfig:
 @dataclass
 class TimeoutConfig:
     """Timeout configuration based on timer.py parameters."""
+
     seconds: float
     logger: Optional[ILogger] = None
 
@@ -42,6 +47,7 @@ class TimeoutConfig:
 @dataclass
 class RateLimitConfig:
     """Rate limiting configuration."""
+
     quota: int
     duration: int
     algorithm: str = "fixed_window"
@@ -51,10 +57,13 @@ class RateLimitConfig:
 @dataclass
 class MonitoringConfig:
     """Monitoring configuration."""
+
     log_threshold: float = 0.1
 
 
-def apply_timeout(handler: Callable, timeout_config: Optional[TimeoutConfig]) -> Callable:
+def apply_timeout(
+    handler: Callable, timeout_config: Optional[TimeoutConfig]
+) -> Callable:
     """Apply timeout wrapper to handler."""
     if timeout_config is None:
         return handler
@@ -66,7 +75,9 @@ def apply_timeout(handler: Callable, timeout_config: Optional[TimeoutConfig]) ->
             )
         except asyncio.TimeoutError:
             if timeout_config.logger:
-                timeout_config.logger.exception(f"Request timeout after {timeout_config.seconds}s")
+                timeout_config.logger.exception(
+                    f"Request timeout after {timeout_config.seconds}s"
+                )
             await send(
                 {
                     "type": "http.response.start",
@@ -84,7 +95,9 @@ def apply_timeout(handler: Callable, timeout_config: Optional[TimeoutConfig]) ->
     return timeout_wrapper
 
 
-def apply_retry_wrapper(handler: Callable, retry_config: Optional[RetryConfig]) -> Callable:
+def apply_retry_wrapper(
+    handler: Callable, retry_config: Optional[RetryConfig]
+) -> Callable:
     """Apply retry wrapper to handler."""
     if retry_config is None:
         return handler
@@ -94,7 +107,7 @@ def apply_retry_wrapper(handler: Callable, retry_config: Optional[RetryConfig]) 
         wait=retry_config.wait,
         exceptions=retry_config.exceptions,
         on_fail=retry_config.on_fail,
-        logger=retry_config.logger
+        logger=retry_config.logger,
     )
     async def retry_wrapper(scope: dict, receive: Callable, send: Callable):
         await handler(scope, receive, send)
@@ -134,7 +147,9 @@ def apply_rate_limit(handler: Callable, rate_limiter: Optional[Any]) -> Callable
     return rate_limit_wrapper
 
 
-def apply_cache(handler: Callable, cache_config: Optional[CacheConfig], cache_provider) -> Callable:
+def apply_cache(
+    handler: Callable, cache_config: Optional[CacheConfig], cache_provider
+) -> Callable:
     """Apply caching wrapper to handler."""
     if cache_config is None:
         return handler
@@ -143,7 +158,7 @@ def apply_cache(handler: Callable, cache_config: Optional[CacheConfig], cache_pr
         # Extract request key for caching
         path = scope.get("path", "/")
         method = scope.get("method", "GET")
-        
+
         if cache_config.cache_key:
             if callable(cache_config.cache_key):
                 cache_key = cache_config.cache_key(scope)
@@ -151,7 +166,7 @@ def apply_cache(handler: Callable, cache_config: Optional[CacheConfig], cache_pr
                 cache_key = cache_config.cache_key
         else:
             cache_key = f"response:{method}:{path}"
-        
+
         # Try to get cached response
         cached_response = await cache_provider.get(cache_key)
         if cached_response is not None:
@@ -159,26 +174,34 @@ def apply_cache(handler: Callable, cache_config: Optional[CacheConfig], cache_pr
             await send(cached_response["start"])
             await send(cached_response["body"])
             return
-        
+
         # Capture response for caching
         response_parts = {"start": None, "body": None}
-        
+
         async def capturing_send(message):
             if message["type"] == "http.response.start":
                 response_parts["start"] = message
             elif message["type"] == "http.response.body":
                 response_parts["body"] = message
                 # Encode and cache the complete response
-                cache_value = cache_config.encoder(response_parts) if cache_config.encoder else response_parts
-                await cache_provider.set(cache_key, cache_value, ex=cache_config.expire_s)
+                cache_value = (
+                    cache_config.encoder(response_parts)
+                    if cache_config.encoder
+                    else response_parts
+                )
+                await cache_provider.set(
+                    cache_key, cache_value, ex=cache_config.expire_s
+                )
             await send(message)
-        
+
         await handler(scope, receive, capturing_send)
 
     return cache_wrapper
 
 
-def apply_monitoring(handler: Callable, monitor_config: Optional[MonitoringConfig]) -> Callable:
+def apply_monitoring(
+    handler: Callable, monitor_config: Optional[MonitoringConfig]
+) -> Callable:
     """Apply monitoring wrapper to handler."""
     if monitor_config is None:
         return handler
@@ -217,10 +240,10 @@ class FeatureConfig:
     retry: Optional[RetryConfig] = None
     timeout: Optional[TimeoutConfig] = None
     monitoring: Optional[MonitoringConfig] = None
-    
+
     # Compiled properties (set during feature compilation)
     rate_limiter: Optional[Any] = field(default=None, init=False)
-    
+
     def get_applicable_features(self) -> List[str]:
         """Get list of features that are configured for this feature config."""
         features = []
@@ -235,8 +258,6 @@ class FeatureConfig:
         if self.monitoring is not None:
             features.append("monitoring")
         return features
-    
-
 
 
 @dataclass
@@ -254,23 +275,25 @@ class GatewayConfig:
     paths: List[PathConfig]
     default_features: Optional[FeatureConfig] = None
     keyspace: str = "asgi-gateway"
-    
+
     @classmethod
-    def from_file(cls, file_path: Union[str, Path], namespace: str = "premier") -> "GatewayConfig":
+    def from_file(
+        cls, file_path: Union[str, Path], namespace: str = "premier"
+    ) -> "GatewayConfig":
         """Load gateway configuration from a YAML file.
-        
+
         Args:
             file_path: Path to the YAML configuration file
             namespace: Namespace in the YAML file (e.g., "premier" for top-level or "tool.premier" for nested)
-            
+
         Returns:
             GatewayConfig instance
-            
+
         Example YAML structure:
         ```yaml
         premier:
           keyspace: "my-gateway"
-          
+
           paths:
             - pattern: "/api/*"
               features:
@@ -283,12 +306,12 @@ class GatewayConfig:
                 retry:
                   max_attempts: 3
                   wait: 1.0
-            
+
             - pattern: "/health"
               features:
                 monitoring:
                   log_threshold: 0.1
-          
+
           default_features:
             timeout:
               seconds: 10.0
@@ -303,23 +326,23 @@ class GatewayConfig:
                 "YAML support requires 'pyyaml' package. "
                 "Install with: pip install pyyaml"
             )
-        
+
         file_path = Path(file_path)
         if not file_path.exists():
             raise FileNotFoundError(f"Configuration file not found: {file_path}")
-        
+
         with open(file_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
-        
+
         # Navigate to the specified namespace
         config_data = data
         for part in namespace.split("."):
             if part not in config_data:
                 raise KeyError(f"Namespace '{namespace}' not found in {file_path}")
             config_data = config_data[part]
-        
+
         return cls._from_dict(config_data)
-    
+
     @classmethod
     def _from_dict(cls, data: Dict[str, Any]) -> "GatewayConfig":
         """Create GatewayConfig from dictionary data."""
@@ -327,22 +350,19 @@ class GatewayConfig:
         paths = []
         for path_data in data.get("paths", []):
             features = cls._parse_features(path_data.get("features", {}))
-            paths.append(PathConfig(
-                pattern=path_data["pattern"],
-                features=features
-            ))
-        
+            paths.append(PathConfig(pattern=path_data["pattern"], features=features))
+
         # Parse default features
         default_features = None
         if "default_features" in data:
             default_features = cls._parse_features(data["default_features"])
-        
+
         return cls(
             paths=paths,
             default_features=default_features,
-            keyspace=data.get("keyspace", "asgi-gateway")
+            keyspace=data.get("keyspace", "asgi-gateway"),
         )
-    
+
     @staticmethod
     def _parse_features(features_data: Dict[str, Any]) -> FeatureConfig:
         """Parse features configuration from dictionary."""
@@ -353,9 +373,9 @@ class GatewayConfig:
             cache = CacheConfig(
                 expire_s=cache_data.get("expire_s"),
                 cache_key=cache_data.get("cache_key"),
-                encoder=None  # Functions can't be serialized in TOML
+                encoder=None,  # Functions can't be serialized in TOML
             )
-        
+
         # Parse retry config
         retry = None
         if "retry" in features_data:
@@ -363,20 +383,22 @@ class GatewayConfig:
             retry = RetryConfig(
                 max_attempts=retry_data.get("max_attempts", 3),
                 wait=retry_data.get("wait", 1.0),
-                exceptions=(Exception,),  # Default, can't serialize exception types in TOML
+                exceptions=(
+                    Exception,
+                ),  # Default, can't serialize exception types in TOML
                 on_fail=None,  # Functions can't be serialized in TOML
-                logger=None   # Logger instances can't be serialized in TOML
+                logger=None,  # Logger instances can't be serialized in TOML
             )
-        
+
         # Parse timeout config
         timeout = None
         if "timeout" in features_data:
             timeout_data = features_data["timeout"]
             timeout = TimeoutConfig(
                 seconds=timeout_data["seconds"],
-                logger=None  # Logger instances can't be serialized in TOML
+                logger=None,  # Logger instances can't be serialized in TOML
             )
-        
+
         # Parse rate limit config
         rate_limit = None
         if "rate_limit" in features_data:
@@ -385,9 +407,9 @@ class GatewayConfig:
                 quota=rate_limit_data["quota"],
                 duration=rate_limit_data["duration"],
                 algorithm=rate_limit_data.get("algorithm", "fixed_window"),
-                bucket_size=rate_limit_data.get("bucket_size")
+                bucket_size=rate_limit_data.get("bucket_size"),
             )
-        
+
         # Parse monitoring config
         monitoring = None
         if "monitoring" in features_data:
@@ -395,16 +417,14 @@ class GatewayConfig:
             monitoring = MonitoringConfig(
                 log_threshold=monitoring_data.get("log_threshold", 0.1)
             )
-        
+
         return FeatureConfig(
             cache=cache,
             retry=retry,
             timeout=timeout,
             rate_limit=rate_limit,
-            monitoring=monitoring
+            monitoring=monitoring,
         )
-
-
 
 
 class ASGIGateway:
@@ -418,6 +438,7 @@ class ASGIGateway:
 
     def __init__(
         self,
+        *,
         config: GatewayConfig,
         app: Optional[Callable] = None,
         servers: Optional[Sequence[str]] = None,
@@ -486,6 +507,7 @@ class ASGIGateway:
         """Pre-compile features for efficient execution."""
         # Create a copy of the feature config to avoid modifying the original
         from copy import deepcopy
+
         compiled = deepcopy(feature_config)
 
         # Compile rate limiting
@@ -725,7 +747,7 @@ class ASGIGateway:
 
 
 def create_gateway(
-    config: GatewayConfig, 
+    config: GatewayConfig,
     app: Optional[Callable] = None,
     cache_provider: Optional[AsyncCacheProvider] = None,
     throttler: Optional[Throttler] = None,
@@ -742,4 +764,4 @@ def create_gateway(
     Returns:
         Configured ASGIGateway instance
     """
-    return ASGIGateway(config, app, cache_provider=cache_provider, throttler=throttler)
+    return ASGIGateway(config=config, app=app, cache_provider=cache_provider, throttler=throttler)

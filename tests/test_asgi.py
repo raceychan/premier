@@ -6,7 +6,11 @@ from premier.asgi import (
     GatewayConfig, 
     PathConfig, 
     FeatureConfig,
-    CompiledFeature,
+    CacheConfig,
+    RetryConfig,
+    TimeoutConfig,
+    RateLimitConfig,
+    MonitoringConfig,
     create_gateway
 )
 
@@ -19,19 +23,19 @@ def basic_config():
             PathConfig(
                 pattern="/api/*",
                 features=FeatureConfig(
-                    timeout=5.0,
-                    rate_limit={"quota": 100, "duration": 60}
+                    timeout=TimeoutConfig(seconds=5.0),
+                    rate_limit=RateLimitConfig(quota=100, duration=60)
                 )
             ),
             PathConfig(
                 pattern="/health",
                 features=FeatureConfig(
-                    monitoring={"log_threshold": 0.1}
+                    monitoring=MonitoringConfig(log_threshold=0.1)
                 )
             )
         ],
         default_features=FeatureConfig(
-            timeout=10.0
+            timeout=TimeoutConfig(seconds=10.0)
         )
     )
 
@@ -90,17 +94,21 @@ class TestGatewayConfig:
         assert config.monitoring is None
     
     def test_feature_config_with_values(self):
+        timeout_config = TimeoutConfig(seconds=5.0)
+        rate_limit_config = RateLimitConfig(quota=100, duration=60)
+        cache_config = CacheConfig(expire_s=300)
+        
         config = FeatureConfig(
-            timeout=5.0,
-            rate_limit={"quota": 100, "duration": 60},
-            cache={"expire_s": 300}
+            timeout=timeout_config,
+            rate_limit=rate_limit_config,
+            cache=cache_config
         )
-        assert config.timeout == 5.0
-        assert config.rate_limit == {"quota": 100, "duration": 60}
-        assert config.cache == {"expire_s": 300}
+        assert config.timeout == timeout_config
+        assert config.rate_limit == rate_limit_config
+        assert config.cache == cache_config
     
     def test_path_config(self):
-        features = FeatureConfig(timeout=5.0)
+        features = FeatureConfig(timeout=TimeoutConfig(seconds=5.0))
         config = PathConfig(pattern="/api/*", features=features)
         assert config.pattern == "/api/*"
         assert config.features == features
@@ -112,112 +120,54 @@ class TestGatewayConfig:
         assert config.keyspace == "asgi-gateway"
 
 
-class TestCompiledFeature:
-    """Test compiled feature functionality."""
+class TestConfigDataclasses:
+    """Test configuration dataclass functionality."""
     
-    def test_compiled_feature_defaults(self):
-        feature = CompiledFeature()
-        assert feature.timeout_seconds is None
-        assert feature.retry_config is None
-        assert feature.rate_limiter is None
-        assert feature.cache_config is None
-        assert feature.monitor_config is None
+    def test_cache_config_defaults(self):
+        config = CacheConfig()
+        assert config.expire_s is None
+        assert config.cache_key is None
+        assert config.encoder is None
+    
+    def test_retry_config_defaults(self):
+        config = RetryConfig()
+        assert config.max_attempts == 3
+        assert config.wait == 1.0
+        assert config.exceptions == (Exception,)
+        assert config.on_fail is None
+        assert config.logger is None
+    
+    def test_timeout_config(self):
+        config = TimeoutConfig(seconds=5.0)
+        assert config.seconds == 5.0
+        assert config.logger is None
+    
+    def test_rate_limit_config(self):
+        config = RateLimitConfig(quota=100, duration=60)
+        assert config.quota == 100
+        assert config.duration == 60
+        assert config.algorithm == "fixed_window"
+        assert config.bucket_size is None
+    
+    def test_monitoring_config(self):
+        config = MonitoringConfig()
+        assert config.log_threshold == 0.1
     
     def test_get_applicable_features_empty(self):
-        feature = CompiledFeature()
+        feature = FeatureConfig()
         assert feature.get_applicable_features() == []
     
     def test_get_applicable_features_with_values(self):
-        feature = CompiledFeature(
-            timeout_seconds=5.0,
-            cache_config={"expire_s": 300},
-            monitor_config={"log_threshold": 0.1}
+        feature = FeatureConfig(
+            timeout=TimeoutConfig(seconds=5.0),
+            cache=CacheConfig(expire_s=300),
+            monitoring=MonitoringConfig(log_threshold=0.1)
         )
         features = feature.get_applicable_features()
         assert "timeout" in features
         assert "cache" in features
         assert "monitoring" in features
         assert len(features) == 3
-    
-    @pytest.mark.asyncio
-    async def test_apply_timeout_no_config(self, mock_scope, mock_receive, mock_send):
-        feature = CompiledFeature()
-        
-        async def dummy_handler(scope, receive, send):
-            await send({"type": "http.response.start", "status": 200})
-        
-        handler = feature.apply_timeout(dummy_handler)
-        assert handler == dummy_handler  # Should return original handler
-    
-    @pytest.mark.asyncio
-    async def test_apply_timeout_with_config(self, mock_scope, mock_receive, mock_send):
-        feature = CompiledFeature(timeout_seconds=0.001)  # Very short timeout
-        
-        async def slow_handler(scope, receive, send):
-            await asyncio.sleep(0.1)  # Longer than timeout
-            await send({"type": "http.response.start", "status": 200})
-        
-        handler = feature.apply_timeout(slow_handler)
-        
-        # Should timeout and send 504 response
-        await handler(mock_scope, mock_receive, mock_send)
-        
-        # Verify timeout response was sent
-        calls = mock_send.call_args_list
-        assert len(calls) == 2
-        assert calls[0][0][0]["status"] == 504
-        assert b"timeout" in calls[1][0][0]["body"]
-    
-    @pytest.mark.asyncio
-    async def test_apply_retry_no_config(self, mock_scope, mock_receive, mock_send):
-        feature = CompiledFeature()
-        
-        async def dummy_handler(scope, receive, send):
-            await send({"type": "http.response.start", "status": 200})
-        
-        handler = feature.apply_retry(dummy_handler)
-        assert handler == dummy_handler  # Should return original handler
-    
-    @pytest.mark.asyncio
-    async def test_apply_retry_with_config(self, mock_scope, mock_receive, mock_send):
-        feature = CompiledFeature(retry_config={"max_attempts": 3, "wait": 0.001})
-        
-        call_count = 0
-        async def failing_handler(scope, receive, send):
-            nonlocal call_count
-            call_count += 1
-            if call_count < 3:
-                raise Exception("Simulated failure")
-            await send({"type": "http.response.start", "status": 200})
-        
-        handler = feature.apply_retry(failing_handler)
-        await handler(mock_scope, mock_receive, mock_send)
-        
-        assert call_count == 3  # Should have retried until success
-    
-    @pytest.mark.asyncio
-    async def test_apply_monitoring_no_config(self, mock_scope, mock_receive, mock_send):
-        feature = CompiledFeature()
-        
-        async def dummy_handler(scope, receive, send):
-            await send({"type": "http.response.start", "status": 200})
-        
-        handler = feature.apply_monitoring(dummy_handler)
-        assert handler == dummy_handler  # Should return original handler
-    
-    @pytest.mark.asyncio
-    async def test_apply_monitoring_with_config(self, mock_scope, mock_receive, mock_send, capsys):
-        feature = CompiledFeature(monitor_config={"log_threshold": 0.001})
-        
-        async def slow_handler(scope, receive, send):
-            await asyncio.sleep(0.01)  # Should exceed threshold
-            await send({"type": "http.response.start", "status": 200})
-        
-        handler = feature.apply_monitoring(slow_handler)
-        await handler(mock_scope, mock_receive, mock_send)
-        
-        captured = capsys.readouterr()
-        assert "GET:/api/test took" in captured.out
 
 
 class TestASGIGateway:
@@ -261,23 +211,23 @@ class TestASGIGateway:
         assert not pattern2.match("/api/test")
         
         # Test feature compilation
-        assert feature1.timeout_seconds == 5.0
+        assert feature1.timeout.seconds == 5.0
         assert feature1.rate_limiter is not None
-        assert feature2.monitor_config is not None
+        assert feature2.monitoring.log_threshold == 0.1
     
     def test_match_path_exact_match(self, basic_config):
         gateway = ASGIGateway(basic_config)
         
         feature = gateway._match_path("/health")
         assert feature is not None
-        assert feature.monitor_config is not None
+        assert feature.monitoring is not None
     
     def test_match_path_wildcard_match(self, basic_config):
         gateway = ASGIGateway(basic_config)
         
         feature = gateway._match_path("/api/users")
         assert feature is not None
-        assert feature.timeout_seconds == 5.0
+        assert feature.timeout.seconds == 5.0
         assert feature.rate_limiter is not None
     
     def test_match_path_default_features(self, basic_config):
@@ -285,7 +235,7 @@ class TestASGIGateway:
         
         feature = gateway._match_path("/unknown")
         assert feature is not None
-        assert feature.timeout_seconds == 10.0  # Default timeout
+        assert feature.timeout.seconds == 10.0  # Default timeout
     
     def test_match_path_no_match(self):
         config = GatewayConfig(paths=[])  # No default features
@@ -296,7 +246,7 @@ class TestASGIGateway:
     
     def test_get_compiled_handler_caching(self, basic_config):
         gateway = ASGIGateway(basic_config)
-        feature = CompiledFeature(timeout_seconds=5.0)
+        feature = FeatureConfig(timeout=TimeoutConfig(seconds=5.0))
         
         # First call should build and cache
         handler1 = gateway._get_compiled_handler(feature)
@@ -449,9 +399,9 @@ class TestIntegration:
                 PathConfig(
                     pattern="/api/*",
                     features=FeatureConfig(
-                        timeout=10.0,
-                        monitoring={"log_threshold": 0.001},
-                        retry={"max_attempts": 2, "wait": 0.001}
+                        timeout=TimeoutConfig(seconds=10.0),
+                        monitoring=MonitoringConfig(log_threshold=0.001),
+                        retry=RetryConfig(max_attempts=2, wait=0.001)
                     )
                 )
             ]

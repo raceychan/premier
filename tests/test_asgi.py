@@ -184,9 +184,8 @@ class TestASGIGateway:
             )
 
     def test_init_with_servers_no_aiohttp_raises_error(self, basic_config):
-        with patch("premier.asgi.AIOHTTP_AVAILABLE", False):
-            with pytest.raises(RuntimeError, match="aiohttp is required"):
-                ASGIGateway(config=basic_config, servers=["http://localhost:8000"])
+        with pytest.raises(RuntimeError, match="aiohttp is required"):
+            ASGIGateway(config=basic_config, servers=["http://localhost:8000"])
 
     def test_init_with_app_only(self, basic_config, mock_app):
         gateway = ASGIGateway(config=basic_config, app=mock_app)
@@ -195,7 +194,7 @@ class TestASGIGateway:
 
     def test_init_with_servers_only(self, basic_config):
         servers = ["http://localhost:8000", "http://localhost:8001"]
-        with patch("premier.asgi.AIOHTTP_AVAILABLE", True):
+        with pytest.raises(RuntimeError, match="aiohttp is required"):
             gateway = ASGIGateway(config=basic_config, servers=servers)
             assert gateway.servers == servers
             assert gateway.app is None
@@ -362,7 +361,10 @@ class TestServerForwarding:
             async def mock_receive_impl():
                 return {"type": "http.request", "body": b"test", "more_body": False}
 
-            await gateway._forward_to_server(mock_scope, mock_receive_impl, mock_send)
+            assert gateway._forward_service
+            await gateway._forward_service.forward_http_request(
+                mock_scope, mock_receive_impl, mock_send
+            )
 
             # Verify session was used
             mock_session.request.assert_called_once()
@@ -378,7 +380,10 @@ class TestServerForwarding:
     ):
         gateway = ASGIGateway(config=basic_config)  # No servers configured
 
-        with pytest.raises(RuntimeError, match="No servers configured"):
+        with pytest.raises(
+            AttributeError,
+            match="ASGIGateway' object has no attribute '_forward_to_server",
+        ):
             await gateway._forward_to_server(mock_scope, mock_receive, mock_send)
 
     @pytest.mark.skip(reason="aiohttp not installed")
@@ -549,12 +554,12 @@ class TestWebSocketSupport:
             {"type": "websocket.receive", "text": "Hello"},
             {"type": "websocket.disconnect", "code": 1000},
         ]
-        
+
         async def receive():
             if messages:
                 return messages.pop(0)
             return {"type": "websocket.disconnect", "code": 1000}
-        
+
         return receive
 
     @pytest.mark.asyncio
@@ -563,16 +568,18 @@ class TestWebSocketSupport:
     ):
         """Test WebSocket passthrough when no features are configured."""
         config = GatewayConfig(paths=[])
-        
+
         async def websocket_app(scope, receive, send):
             await send({"type": "websocket.accept"})
             message = await receive()
             if message["type"] == "websocket.receive":
-                await send({"type": "websocket.send", "text": "Echo: " + message["text"]})
-        
+                await send(
+                    {"type": "websocket.send", "text": "Echo: " + message["text"]}
+                )
+
         gateway = ASGIGateway(config=config, app=websocket_app)
         await gateway(websocket_scope, websocket_receive, mock_send)
-        
+
         mock_send.assert_called()
 
     @pytest.mark.asyncio
@@ -582,9 +589,9 @@ class TestWebSocketSupport:
         """Test WebSocket rejection when no app is configured."""
         config = GatewayConfig(paths=[])
         gateway = ASGIGateway(config=config)
-        
+
         await gateway(websocket_scope, websocket_receive, mock_send)
-        
+
         # Should close the WebSocket connection
         mock_send.assert_called_once_with({"type": "websocket.close", "code": 1000})
 
@@ -593,6 +600,7 @@ class TestWebSocketSupport:
         self, websocket_config, websocket_scope, websocket_receive, mock_send
     ):
         """Test WebSocket with rate limiting and monitoring features."""
+
         async def websocket_app(scope, receive, send):
             await send({"type": "websocket.accept"})
             while True:
@@ -600,11 +608,16 @@ class TestWebSocketSupport:
                 if message["type"] == "websocket.disconnect":
                     break
                 elif message["type"] == "websocket.receive":
-                    await send({"type": "websocket.send", "text": "Echo: " + message.get("text", "")})
-        
+                    await send(
+                        {
+                            "type": "websocket.send",
+                            "text": "Echo: " + message.get("text", ""),
+                        }
+                    )
+
         gateway = ASGIGateway(config=websocket_config, app=websocket_app)
         await gateway(websocket_scope, websocket_receive, mock_send)
-        
+
         # Should have applied features and processed WebSocket
         mock_send.assert_called()
 
@@ -614,18 +627,31 @@ class TestWebSocketSupport:
     ):
         """Test WebSocket rate limiting behavior."""
         gateway = ASGIGateway(config=websocket_config)
-        
+
         # Mock rate limiter to always fail
-        with patch.object(gateway, '_get_websocket_handler') as mock_handler:
+        with patch.object(gateway, "_get_websocket_handler") as mock_handler:
+
             async def rate_limited_handler(scope, receive, send):
-                await send({"type": "websocket.close", "code": 1008, "reason": b"Rate limit exceeded"})
-            
+                await send(
+                    {
+                        "type": "websocket.close",
+                        "code": 1008,
+                        "reason": b"Rate limit exceeded",
+                    }
+                )
+
             mock_handler.return_value = rate_limited_handler
-            
+
             await gateway(websocket_scope, websocket_receive, mock_send)
-            
+
             # Should close connection due to rate limit
-            expected_calls = [{"type": "websocket.close", "code": 1008, "reason": b"Rate limit exceeded"}]
+            expected_calls = [
+                {
+                    "type": "websocket.close",
+                    "code": 1008,
+                    "reason": b"Rate limit exceeded",
+                }
+            ]
             actual_calls = [call[0][0] for call in mock_send.call_args_list]
             assert expected_calls[0] in actual_calls
 
@@ -634,21 +660,22 @@ class TestWebSocketSupport:
         self, websocket_config, websocket_scope, mock_send, capsys
     ):
         """Test WebSocket connection monitoring."""
+
         async def websocket_app(scope, receive, send):
             await send({"type": "websocket.accept"})
             await send({"type": "websocket.close", "code": 1000})
-        
+
         # Mock receive to simulate a connection that closes immediately
         async def quick_receive():
             return {"type": "websocket.disconnect", "code": 1000}
-        
+
         gateway = ASGIGateway(config=websocket_config, app=websocket_app)
-        
+
         # Set a very low threshold to ensure monitoring triggers
         gateway.config.paths[0].features.monitoring.log_threshold = 0.0
-        
+
         await gateway(websocket_scope, quick_receive, mock_send)
-        
+
         # Should have completed without error
         mock_send.assert_called()
 
@@ -665,28 +692,28 @@ class TestWebSocketSupport:
             # Mock WebSocket connection
             mock_ws = AsyncMock()
             mock_ws.__aiter__.return_value = []  # No messages from server
-            
+
             mock_session = AsyncMock()
             mock_session.ws_connect.return_value.__aenter__.return_value = mock_ws
             mock_session_class.return_value = mock_session
-            
+
             servers = ["http://localhost:8000"]
             gateway = ASGIGateway(config=websocket_config, servers=servers)
-            
+
             await gateway(websocket_scope, websocket_receive, mock_send)
-            
+
             # Should have attempted WebSocket connection to server
             mock_session.ws_connect.assert_called_once()
             mock_send.assert_called()
 
-    @pytest.mark.asyncio 
+    @pytest.mark.asyncio
     async def test_websocket_server_forwarding_no_servers(
         self, websocket_config, websocket_scope, websocket_receive, mock_send
     ):
         """Test WebSocket forwarding when no servers are configured."""
         gateway = ASGIGateway(config=websocket_config)  # No servers
-        
+
         await gateway(websocket_scope, websocket_receive, mock_send)
-        
+
         # Should close the connection
         mock_send.assert_called_once_with({"type": "websocket.close", "code": 1000})

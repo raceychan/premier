@@ -59,10 +59,10 @@ Premier is designed for **simplicity and accessibility** - perfect for simple ap
 ┌─────────────────────────────────────────────────────────────┐
 │ App Instance 1                                              │
 │ ┌─────────────────┐    ┌─────────────────────────────────┐  │
-│ │   Premier       │────│       Your ASGI App            │  │
-│ │   Gateway       │    │     (FastAPI/Django/etc)       │  │
+│ │   Premier       │────│       Your ASGI App             │  │
+│ │   Gateway       │    │     (FastAPI/Django/etc)        │  │
 │ │  ┌──────────┐   │    │                                 │  │
-│ │  │Cache     │   │    │  @app.get("/api/users")        │  │
+│ │  │Cache     │   │    │  @app.get("/api/users")         │  │
 │ │  │RateLimit │   │    │  async def get_users():         │  │
 │ │  │Retry     │   │    │      return users               │  │
 │ │  │Timeout   │   │    │                                 │  │
@@ -71,7 +71,9 @@ Premier is designed for **simplicity and accessibility** - perfect for simple ap
 └─────────────────────────────────────────────────────────────┘
 ```
 
+You can keep your existing app.py file untouched
 ```python
+# app.py
 from premier.asgi import ASGIGateway, GatewayConfig
 from fastapi import FastAPI
 
@@ -81,11 +83,20 @@ app = FastAPI()
 @app.get("/api/users/{user_id}")
 async def get_user(user_id: int):
     return await fetch_user_from_database(user_id)
+```
 
+Next, import your app instance and wrap it with ASGIGateway:
+
+```python
+# gateway.py
+from .app import app
 # Load configuration and wrap app
 config = GatewayConfig.from_file("gateway.yaml")
-gateway = ASGIGateway(config, app=app)
+app = ASGIGateway(config=config, app=app)
 ```
+
+Then, instead of serving the original app directly, serve the one wrapped with ASGIGateway.
+
 
 ### Standalone Mode
 
@@ -115,7 +126,9 @@ gateway = ASGIGateway(config, app=app)
             └───────────────┘          └───────────────┘
 ```
 
+
 ```python
+# main.py
 from premier.asgi import ASGIGateway, GatewayConfig
 
 config = GatewayConfig.from_file("gateway.yaml")

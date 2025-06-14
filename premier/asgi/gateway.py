@@ -1,16 +1,21 @@
 import asyncio
 import re
+import time
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 
-from .cache import Cache
-from .dashboard import DashboardHandler
-from .providers import AsyncCacheProvider, AsyncInMemoryCache
-from .retry import retry
-from .throttler import Throttler
-from .throttler.handler import AsyncDefaultHandler
-from .timer import ILogger
+import yaml
+
+from ..cache import Cache
+from ..dashboard import DashboardService
+from ..providers import AsyncCacheProvider, AsyncInMemoryCache
+from ..retry import retry
+from ..throttler import Throttler
+from ..throttler.handler import AsyncDefaultHandler
+from ..timer import ILogger
+from .loadbalancer import ILoadBalancer, RandomLoadBalancer, create_random_load_balancer
 
 # from urllib.parse import urljoin, urlparse
 
@@ -208,7 +213,6 @@ def apply_monitoring(
         return handler
 
     async def monitor_wrapper(scope: dict, receive: Callable, send: Callable):
-        import time
 
         path = scope.get("path", "/")
         method = scope.get("method", "GET")
@@ -222,14 +226,6 @@ def apply_monitoring(
                 print(f"Request {request_key} took {duration:.3f}s")
 
     return monitor_wrapper
-
-
-try:
-    import aiohttp
-
-    AIOHTTP_AVAILABLE = True
-except ImportError:
-    AIOHTTP_AVAILABLE = False
 
 
 @dataclass
@@ -320,13 +316,6 @@ class GatewayConfig:
               expire_s: 300
         ```
         """
-        try:
-            import yaml
-        except ImportError:
-            raise ImportError(
-                "YAML support requires 'pyyaml' package. "
-                "Install with: pip install pyyaml"
-            )
 
         file_path = Path(file_path)
         if not file_path.exists():
@@ -446,6 +435,7 @@ class ASGIGateway:
         cache_provider: Optional[AsyncCacheProvider] = None,
         throttler: Optional[Throttler] = None,
         config_file_path: Optional[str] = None,
+        lb_factory: Callable[[List[str]], ILoadBalancer] = RandomLoadBalancer,
     ):
         """
         Initialize the ASGI Gateway.
@@ -460,11 +450,6 @@ class ASGIGateway:
         if app is not None and servers is not None:
             raise ValueError("app and servers are mutually exclusive")
 
-        if servers is not None and not AIOHTTP_AVAILABLE:
-            raise RuntimeError(
-                "aiohttp is required when servers parameter is used. Install with: pip install aiohttp"
-            )
-
         self.config = config
         self.app = app
         self.servers = list(servers) if servers else None
@@ -473,22 +458,27 @@ class ASGIGateway:
         self._cache_provider = cache_provider or AsyncInMemoryCache()
 
         # Initialize throttler
-        if throttler:
-            self._throttler = throttler
-        else:
-            handler = AsyncDefaultHandler(self._cache_provider)
-            self._throttler = Throttler(
-                handler=handler, keyspace=f"{config.keyspace}:throttler"
-            )
+        self._throttler = throttler or Throttler(
+            handler=AsyncDefaultHandler(self._cache_provider),
+            keyspace=f"{config.keyspace}:throttler",
+        )
 
         self._compiled_patterns = self._compile_path_patterns()
         self._session = None
         self._handler_cache: Dict[int, Callable] = {}
         # Cache compiled handlers by compiled feature id
-        
-        # Initialize dashboard
-        self._dashboard = DashboardHandler(config_file_path)
+
+        # Initialize dashboard service
+        self._dashboard_service = DashboardService(config_file_path)
         self._stats_enabled = True
+
+        if servers:
+            from .forward import ForwardService
+
+            # Initialize forward service
+            self._forward_service = ForwardService(self.servers, lb_factory=lb_factory)
+        else:
+            self._forward_service = None
 
     def _compile_path_patterns(self) -> List[tuple[re.Pattern, FeatureConfig]]:
         """Compile regex patterns and features for efficient path matching."""
@@ -512,7 +502,6 @@ class ASGIGateway:
     def _compile_features(self, feature_config: FeatureConfig) -> FeatureConfig:
         """Pre-compile features for efficient execution."""
         # Create a copy of the feature config to avoid modifying the original
-        from copy import deepcopy
 
         compiled = deepcopy(feature_config)
 
@@ -552,8 +541,8 @@ class ASGIGateway:
         return None
 
     async def call_downstream(self, scope: dict, receive: Callable, send: Callable):
-        if self.servers:
-            await self._forward_to_server(scope, receive, send)
+        if self._forward_service:
+            await self._forward_service.forward_http_request(scope, receive, send)
         elif self.app:
             await self.app(scope, receive, send)
         else:
@@ -591,7 +580,7 @@ class ASGIGateway:
 
         # Add stats tracking wrapper
         handler = self._apply_stats_tracking(handler)
-        
+
         # Cache the fully composed handler
         self._handler_cache[cache_key] = handler
         return handler
@@ -602,6 +591,7 @@ class ASGIGateway:
             # Handle WebSocket connections
             await self._handle_websocket(scope, receive, send)
             return
+
         elif scope["type"] != "http":
             # Pass through other non-HTTP requests
             if self.app:
@@ -609,12 +599,12 @@ class ASGIGateway:
             return
 
         path = scope.get("path", "/")
-        
+
         # Handle dashboard routes
         if path.startswith("/premier/dashboard"):
-            await self._handle_dashboard_request(scope, receive, send)
+            await self._dashboard_service(scope, receive, send)
             return
-        
+
         compiled_feature = self._match_path(path)
 
         if compiled_feature:
@@ -622,8 +612,8 @@ class ASGIGateway:
             await handler(scope, receive, send)
         else:
             # No features configured, pass through to downstream app or servers
-            if self.servers:
-                await self._forward_to_server(scope, receive, send)
+            if self._forward_service:
+                await self._forward_service.forward_http_request(scope, receive, send)
             elif self.app:
                 await self.app(scope, receive, send)
             else:
@@ -646,131 +636,21 @@ class ASGIGateway:
         """Set the downstream ASGI application."""
         self.app = app
 
-    async def _get_session(self):
-        """Get or create aiohttp session."""
-        if self._session is None:
-            self._session = aiohttp.ClientSession()
-        return self._session
-
-    async def _forward_to_server(self, scope: dict, receive: Callable, send: Callable):
-        """Forward the request to one of the configured servers."""
-        import random
-
-        # Simple round-robin/random selection of server
-        if not self.servers:
-            raise RuntimeError("No servers configured")
-        server_url = random.choice(self.servers)
-
-        # Build the target URL
-        path = scope.get("path", "/")
-        query_string = scope.get("query_string", b"").decode("utf-8")
-        target_url = f"{server_url.rstrip('/')}{path}"
-        if query_string:
-            target_url += f"?{query_string}"
-
-        method = scope.get("method", "GET")
-        headers = {}
-
-        # Convert ASGI headers to dict
-        for header_name, header_value in scope.get("headers", []):
-            name = header_name.decode("latin1")
-            value = header_value.decode("latin1")
-            headers[name] = value
-
-        # Remove hop-by-hop headers
-        hop_by_hop = {
-            "connection",
-            "keep-alive",
-            "proxy-authenticate",
-            "proxy-authorization",
-            "te",
-            "trailers",
-            "transfer-encoding",
-            "upgrade",
-        }
-        headers = {k: v for k, v in headers.items() if k.lower() not in hop_by_hop}
-
-        # Collect request body
-        body = b""
-        while True:
-            message = await receive()
-            if message["type"] == "http.request":
-                body += message.get("body", b"")
-                if not message.get("more_body", False):
-                    break
-
-        session = await self._get_session()
-
-        try:
-            async with session.request(
-                method=method, url=target_url, headers=headers, data=body
-            ) as response:
-                # Send response start
-                response_headers = []
-                for name, value in response.headers.items():
-                    # Skip hop-by-hop headers
-                    if name.lower() not in hop_by_hop:
-                        response_headers.append(
-                            [name.encode("latin1"), value.encode("latin1")]
-                        )
-
-                await send(
-                    {
-                        "type": "http.response.start",
-                        "status": response.status,
-                        "headers": response_headers,
-                    }
-                )
-
-                # Stream response body
-                async for chunk in response.content.iter_chunked(8192):
-                    await send(
-                        {
-                            "type": "http.response.body",
-                            "body": chunk,
-                            "more_body": True,
-                        }
-                    )
-
-                # Send final empty chunk
-                await send(
-                    {
-                        "type": "http.response.body",
-                        "body": b"",
-                        "more_body": False,
-                    }
-                )
-
-        except Exception as e:
-            # Send error response
-            error_response = f'{{"error": "Proxy error: {str(e)}"}}'.encode()
-            await send(
-                {
-                    "type": "http.response.start",
-                    "status": 502,
-                    "headers": [[b"content-type", b"application/json"]],
-                }
-            )
-            await send(
-                {
-                    "type": "http.response.body",
-                    "body": error_response,
-                }
-            )
-
     async def _handle_websocket(self, scope: dict, receive: Callable, send: Callable):
         """Handle WebSocket connections with optional feature application."""
         path = scope.get("path", "/")
         compiled_feature = self._match_path(path)
-        
+
         if compiled_feature:
             # Apply relevant features to WebSocket connection
             handler = self._get_websocket_handler(compiled_feature)
             await handler(scope, receive, send)
         else:
             # No features configured, pass through to downstream app or servers
-            if self.servers:
-                await self._forward_websocket_to_server(scope, receive, send)
+            if self._forward_service:
+                await self._forward_service.forward_websocket_connection(
+                    scope, receive, send
+                )
             elif self.app:
                 await self.app(scope, receive, send)
             else:
@@ -781,311 +661,114 @@ class ASGIGateway:
         """Get or build a WebSocket handler for the given feature configuration."""
         # For WebSocket, we mainly support monitoring and rate limiting
         handler = self._call_websocket_downstream
-        
+
         # Apply monitoring if configured
         if feature_config.monitoring:
-            handler = self._apply_websocket_monitoring(handler, feature_config.monitoring)
-            
+            handler = self._apply_websocket_monitoring(
+                handler, feature_config.monitoring
+            )
+
         # Apply rate limiting if configured
         if feature_config.rate_limiter:
-            handler = self._apply_websocket_rate_limit(handler, feature_config.rate_limiter)
-            
+            handler = self._apply_websocket_rate_limit(
+                handler, feature_config.rate_limiter
+            )
+
         return handler
 
-    async def _call_websocket_downstream(self, scope: dict, receive: Callable, send: Callable):
+    async def _call_websocket_downstream(
+        self, scope: dict, receive: Callable, send: Callable
+    ):
         """Call downstream WebSocket handler."""
-        if self.servers:
-            await self._forward_websocket_to_server(scope, receive, send)
+        if self._forward_service:
+            await self._forward_service.forward_websocket_connection(
+                scope, receive, send
+            )
         elif self.app:
             await self.app(scope, receive, send)
         else:
             await send({"type": "websocket.close", "code": 1000})
 
-    def _apply_websocket_monitoring(self, handler: Callable, monitor_config: MonitoringConfig) -> Callable:
+    def _apply_websocket_monitoring(
+        self, handler: Callable, monitor_config: MonitoringConfig
+    ) -> Callable:
         """Apply monitoring to WebSocket connections."""
+
         async def monitor_wrapper(scope: dict, receive: Callable, send: Callable):
-            import time
-            
+
             path = scope.get("path", "/")
             connection_start = time.time()
-            
+
             async def monitoring_send(message):
                 if message["type"] == "websocket.close":
                     duration = time.time() - connection_start
                     if duration > monitor_config.log_threshold:
                         print(f"WebSocket {path} connection lasted {duration:.3f}s")
                 await send(message)
-            
+
             await handler(scope, receive, monitoring_send)
-        
+
         return monitor_wrapper
 
     def _apply_websocket_rate_limit(self, handler: Callable, rate_limiter) -> Callable:
         """Apply rate limiting to WebSocket connections."""
+
         async def rate_limit_wrapper(scope: dict, receive: Callable, send: Callable):
             # Check rate limit on connection
             @rate_limiter
             async def limited_connect():
                 pass
-            
+
             try:
                 await limited_connect()
                 await handler(scope, receive, send)
             except Exception:
                 # Rate limit exceeded, close connection
-                await send({"type": "websocket.close", "code": 1008, "reason": b"Rate limit exceeded"})
-        
-        return rate_limit_wrapper
-
-    async def _forward_websocket_to_server(self, scope: dict, receive: Callable, send: Callable):
-        """Forward WebSocket connection to one of the configured servers."""
-        import random
-        import aiohttp
-        
-        if not self.servers:
-            await send({"type": "websocket.close", "code": 1000})
-            return
-            
-        server_url = random.choice(self.servers)
-        path = scope.get("path", "/")
-        query_string = scope.get("query_string", b"").decode("utf-8")
-        
-        # Convert HTTP URL to WebSocket URL
-        ws_url = server_url.replace("http://", "ws://").replace("https://", "wss://")
-        target_url = f"{ws_url.rstrip('/')}{path}"
-        if query_string:
-            target_url += f"?{query_string}"
-        
-        # Extract headers
-        headers = {}
-        for header_name, header_value in scope.get("headers", []):
-            name = header_name.decode("latin1")
-            value = header_value.decode("latin1")
-            headers[name] = value
-        
-        session = await self._get_session()
-        
-        try:
-            async with session.ws_connect(target_url, headers=headers) as ws:
-                # Send WebSocket accept
-                await send({"type": "websocket.accept"})
-                
-                async def forward_from_client():
-                    """Forward messages from client to server."""
-                    while True:
-                        message = await receive()
-                        if message["type"] == "websocket.receive":
-                            if "bytes" in message:
-                                await ws.send_bytes(message["bytes"])
-                            elif "text" in message:
-                                await ws.send_str(message["text"])
-                        elif message["type"] == "websocket.disconnect":
-                            await ws.close()
-                            break
-                
-                async def forward_from_server():
-                    """Forward messages from server to client."""
-                    async for msg in ws:
-                        if msg.type == aiohttp.WSMsgType.TEXT:
-                            await send({"type": "websocket.send", "text": msg.data})
-                        elif msg.type == aiohttp.WSMsgType.BINARY:
-                            await send({"type": "websocket.send", "bytes": msg.data})
-                        elif msg.type == aiohttp.WSMsgType.ERROR:
-                            break
-                
-                # Run both forwarding tasks concurrently
-                import asyncio
-                await asyncio.gather(
-                    forward_from_client(),
-                    forward_from_server(),
-                    return_exceptions=True
+                await send(
+                    {
+                        "type": "websocket.close",
+                        "code": 1008,
+                        "reason": b"Rate limit exceeded",
+                    }
                 )
-                
-        except Exception:
-            await send({"type": "websocket.close", "code": 1011, "reason": b"Proxy error"})
+
+        return rate_limit_wrapper
 
     def _apply_stats_tracking(self, handler: Callable) -> Callable:
         """Apply stats tracking wrapper to handler."""
         if not self._stats_enabled:
             return handler
-            
+
         async def stats_wrapper(scope: dict, receive: Callable, send: Callable):
-            import time
-            
+
             path = scope.get("path", "/")
             method = scope.get("method", "GET")
             start_time = time.time()
             status = 200
             cache_hit = False
-            
+
             # Track response info
             async def tracking_send(message):
                 nonlocal status, cache_hit
                 if message["type"] == "http.response.start":
                     status = message["status"]
                 await send(message)
-            
+
             try:
                 await handler(scope, receive, tracking_send)
             finally:
                 response_time = (time.time() - start_time) * 1000  # Convert to ms
-                self._dashboard.record_request(method, path, status, response_time, cache_hit)
-        
+                self._dashboard_service.record_request(
+                    method, path, status, response_time, cache_hit
+                )
+
         return stats_wrapper
-    
-    async def _handle_dashboard_request(self, scope: dict, receive: Callable, send: Callable):
-        """Handle dashboard HTTP requests."""
-        import json
-        
-        path = scope["path"]
-        method = scope["method"]
-        
-        if path == "/premier/dashboard" and method == "GET":
-            # Return HTML dashboard
-            from pathlib import Path
-            html_path = Path(__file__).parent / "dashboard" / "dashboard.html"
-            try:
-                with open(html_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                await send({
-                    "type": "http.response.start",
-                    "status": 200,
-                    "headers": [[b"content-type", b"text/html; charset=utf-8"]],
-                })
-                await send({
-                    "type": "http.response.body",
-                    "body": content.encode('utf-8'),
-                })
-            except FileNotFoundError:
-                await send({
-                    "type": "http.response.start",
-                    "status": 404,
-                    "headers": [[b"content-type", b"text/plain"]],
-                })
-                await send({
-                    "type": "http.response.body",
-                    "body": b"Dashboard not found",
-                })
-            return
-        
-        elif path == "/premier/dashboard/api/stats" and method == "GET":
-            # Return JSON stats
-            stats_json = json.dumps(self._dashboard.get_stats_json())
-            await send({
-                "type": "http.response.start", 
-                "status": 200,
-                "headers": [[b"content-type", b"application/json"]],
-            })
-            await send({
-                "type": "http.response.body",
-                "body": stats_json.encode(),
-            })
-            return
-        
-        elif path == "/premier/dashboard/api/policies" and method == "GET":
-            # Return JSON policies - pass current config
-            config_dict = None
-            if self._dashboard.config_path:
-                config_dict = self._dashboard.load_config_dict()
-            policies_json = json.dumps(self._dashboard.get_policies_json(config_dict))
-            await send({
-                "type": "http.response.start",
-                "status": 200, 
-                "headers": [[b"content-type", b"application/json"]],
-            })
-            await send({
-                "type": "http.response.body",
-                "body": policies_json.encode(),
-            })
-            return
-        
-        elif path == "/premier/dashboard/api/config" and method == "GET":
-            # Return YAML config
-            config_yaml = self._dashboard.load_config_yaml()
-            await send({
-                "type": "http.response.start",
-                "status": 200,
-                "headers": [[b"content-type", b"text/plain; charset=utf-8"]],
-            })
-            await send({
-                "type": "http.response.body",
-                "body": config_yaml.encode('utf-8'),
-            })
-            return
-        
-        elif path == "/premier/dashboard/api/config" and method == "PUT":
-            # Save YAML config
-            body = b""
-            while True:
-                message = await receive()
-                if message["type"] == "http.request":
-                    body += message.get("body", b"")
-                    if not message.get("more_body", False):
-                        break
-            
-            config_yaml = body.decode('utf-8')
-            if self._dashboard.save_config_yaml(config_yaml):
-                await send({
-                    "type": "http.response.start",
-                    "status": 200,
-                    "headers": [[b"content-type", b"text/plain"]],
-                })
-                await send({
-                    "type": "http.response.body",
-                    "body": b"Configuration saved successfully",
-                })
-            else:
-                await send({
-                    "type": "http.response.start",
-                    "status": 400,
-                    "headers": [[b"content-type", b"text/plain"]],
-                })
-                await send({
-                    "type": "http.response.body",
-                    "body": b"Failed to save configuration",
-                })
-            return
-        
-        elif path == "/premier/dashboard/api/config/validate" and method == "POST":
-            # Validate YAML config
-            body = b""
-            while True:
-                message = await receive()
-                if message["type"] == "http.request":
-                    body += message.get("body", b"")
-                    if not message.get("more_body", False):
-                        break
-            
-            config_yaml = body.decode('utf-8')
-            result = self._dashboard.validate_config_yaml(config_yaml)
-            result_json = json.dumps(result)
-            await send({
-                "type": "http.response.start",
-                "status": 200,
-                "headers": [[b"content-type", b"application/json"]],
-            })
-            await send({
-                "type": "http.response.body",
-                "body": result_json.encode(),
-            })
-            return
-        
-        # Return 404 for unknown paths
-        await send({
-            "type": "http.response.start",
-            "status": 404,
-            "headers": [[b"content-type", b"text/plain"]],
-        })
-        await send({
-            "type": "http.response.body",
-            "body": b"Dashboard endpoint not found",
-        })
 
     async def close(self):
         """Close gateway resources."""
-        if self._session:
-            await self._session.close()
         await self._cache_provider.close()
+        if self._forward_service:
+            await self._forward_service.close()
 
 
 def create_gateway(
@@ -1093,6 +776,7 @@ def create_gateway(
     app: Optional[Callable] = None,
     cache_provider: Optional[AsyncCacheProvider] = None,
     throttler: Optional[Throttler] = None,
+    lb_factory: Callable[[List[str]], ILoadBalancer] = RandomLoadBalancer,
 ) -> ASGIGateway:
     """
     Factory function to create an ASGI Gateway.
@@ -1102,8 +786,15 @@ def create_gateway(
         app: Downstream ASGI application (optional)
         cache_provider: Cache provider for both caching and throttling
         throttler: Throttler instance for rate limiting
+        lb_factory: Load balancer factory function
 
     Returns:
         Configured ASGIGateway instance
     """
-    return ASGIGateway(config=config, app=app, cache_provider=cache_provider, throttler=throttler)
+    return ASGIGateway(
+        config=config,
+        app=app,
+        cache_provider=cache_provider,
+        throttler=throttler,
+        lb_factory=lb_factory,
+    )

@@ -798,8 +798,9 @@ class ASGIGateway:
                 await handler(scope, receive, tracking_send)
             finally:
                 response_time = (time.time() - start_time) * 1000  # Convert to ms
+                cache_hit = scope.get("_cache_hit", False)
                 self._dashboard_service.record_request(
-                    method, path, status, response_time, scope["_cache_hit"]
+                    method, path, status, response_time, cache_hit
                 )
 
         return stats_wrapper

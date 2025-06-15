@@ -176,16 +176,13 @@ def apply_cache(
 
         # Try to get cached response
         cached_response = await cache_provider.get(cache_key)
-        if cached_response is not None:
-            # Mark cache hit in scope for stats tracking
-            scope["_cache_hit"] = True
+        scope["_cache_hit"] = cached_response is not None
+        
+        if scope["_cache_hit"]:
             # Send cached response
             await send(cached_response["start"])
             await send(cached_response["body"])
             return
-
-        # Mark cache miss in scope for stats tracking
-        scope["_cache_hit"] = False
 
         # Capture response for caching
         response_parts = {"start": None, "body": None}
@@ -789,7 +786,7 @@ class ASGIGateway:
             method = scope.get("method", "GET")
             start_time = time.time()
             status = 200
-
+            
             # Track response info
             async def tracking_send(message):
                 nonlocal status
@@ -801,9 +798,8 @@ class ASGIGateway:
                 await handler(scope, receive, tracking_send)
             finally:
                 response_time = (time.time() - start_time) * 1000  # Convert to ms
-                cache_hit = scope.get("_cache_hit", False)
                 self._dashboard_service.record_request(
-                    method, path, status, response_time, cache_hit
+                    method, path, status, response_time, scope["_cache_hit"]
                 )
 
         return stats_wrapper

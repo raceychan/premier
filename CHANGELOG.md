@@ -21,12 +21,7 @@
   - Simplified main gateway module by extracting specialized services
   - Improved code organization and separation of concerns
 
-### Chores
 
-- **📄 License** - Added LICENSE file to the project
-- **📖 Documentation** - Updated README.md with latest information
-- **📋 Changelog** - Updated changelog documentation
-- **📸 Dashboard Screenshots** - Added new dashboard screenshots showing configuration and statistics views
 
 ### Technical Improvements
 

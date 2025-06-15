@@ -1,4 +1,9 @@
 # Premier
+[![PyPI version](https://badge.fury.io/py/premier.svg)](https://badge.fury.io/py/premier)
+[![Python Version](https://img.shields.io/pypi/pyversions/premier.svg)](https://pypi.org/project/premier/)
+[![License](https://img.shields.io/github/license/raceychan/premier)](https://github.com/raceychan/premier/blob/master/LICENSE)
+
+--- 
 
 Premier is a versatile Python toolkit that can be used in three main ways:
 
@@ -8,10 +13,6 @@ Premier is a versatile Python toolkit that can be used in three main ways:
 
 Premier transforms any Python web application into a full-featured API gateway with caching, rate limiting, retry logic, timeouts, and performance monitoring.
 
---- 
-[![PyPI version](https://badge.fury.io/py/premier.svg)](https://badge.fury.io/py/premier)
-[![Python Version](https://img.shields.io/pypi/pyversions/premier.svg)](https://pypi.org/project/premier/)
-[![License](https://img.shields.io/github/license/raceychan/premier)](https://github.com/raceychan/premier/blob/master/LICENSE)
 
 ## Documentation
 
@@ -24,10 +25,8 @@ Premier transforms any Python web application into a full-featured API gateway w
 
 Premier provides enterprise-grade API gateway functionality with:
 
-- **Response Caching** - Smart caching with TTL and custom cache keys
-- **Rate Limiting** - Multiple algorithms (fixed/sliding window, token/leaky bucket), works with distributed app
-- **Retry Logic** - Configurable retry strategies with exponential backoff
-- **Request Timeouts** - Per-path timeout protection
+- **API Gateway Features** - Caching, rate limiting, retry logic, and timeout protection
+- **Load Balancing & Circuit Breaker** - Round robin load balancing with fault tolerance
 - **WebSocket Support** - Full WebSocket proxying with rate limiting and monitoring
 - **Path-Based Policies** - Different features per route with regex matching
 - **Web Dashboard** - Built-in web GUI for monitoring and configuration management

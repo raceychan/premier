@@ -8,6 +8,7 @@ including caching, rate limiting, retry logic, timeouts, and monitoring.
 from .gateway import (
     ASGIGateway,
     CacheConfig,
+    CircuitBreakerConfig,
     FeatureConfig,
     GatewayConfig,
     MonitoringConfig,
@@ -17,7 +18,7 @@ from .gateway import (
     TimeoutConfig,
     create_gateway,
 )
-from .loadbalancer import ILoadBalancer, RandomLoadBalancer, create_random_load_balancer
+from .loadbalancer import ILoadBalancer, RandomLoadBalancer, RoundRobinLoadBalancer, create_random_load_balancer, create_round_robin_load_balancer
 
 __all__ = [
     # Main classes
@@ -25,6 +26,7 @@ __all__ = [
     "GatewayConfig",
     # Configuration classes
     "CacheConfig",
+    "CircuitBreakerConfig",
     "FeatureConfig",
     "MonitoringConfig",
     "PathConfig",
@@ -34,7 +36,9 @@ __all__ = [
     # Load balancer
     "ILoadBalancer",
     "RandomLoadBalancer",
+    "RoundRobinLoadBalancer",
     # Factory functions
     "create_gateway",
     "create_random_load_balancer",
+    "create_round_robin_load_balancer",
 ]

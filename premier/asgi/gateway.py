@@ -11,11 +11,11 @@ import yaml
 from ..cache import Cache
 from ..dashboard import DashboardService
 from ..providers import AsyncCacheProvider, AsyncInMemoryCache
-from ..retry import retry
+from ..retry import retry, CircuitBreaker
 from ..throttler import Throttler
 from ..throttler.handler import AsyncDefaultHandler
 from ..timer import ILogger
-from .loadbalancer import ILoadBalancer, RandomLoadBalancer, create_random_load_balancer
+from .loadbalancer import ILoadBalancer, RandomLoadBalancer, RoundRobinLoadBalancer, create_random_load_balancer, create_round_robin_load_balancer
 
 # from urllib.parse import urljoin, urlparse
 
@@ -40,6 +40,15 @@ class RetryConfig:
     exceptions: tuple[type[Exception], ...] = (Exception,)
     on_fail: Optional[Callable] = None
     logger: Optional[ILogger] = None
+
+
+@dataclass
+class CircuitBreakerConfig:
+    """Circuit breaker configuration."""
+
+    failure_threshold: int = 5
+    recovery_timeout: float = 60.0
+    expected_exception: type[Exception] = Exception
 
 
 @dataclass
@@ -225,6 +234,16 @@ def apply_monitoring(
     return monitor_wrapper
 
 
+def apply_circuit_breaker(
+    handler: Callable, circuit_breaker: Optional[CircuitBreaker]
+) -> Callable:
+    """Apply circuit breaker wrapper to handler."""
+    if circuit_breaker is None:
+        return handler
+
+    return circuit_breaker(handler)
+
+
 @dataclass
 class FeatureConfig:
     """Configuration for individual features that can be applied to a path."""
@@ -234,9 +253,11 @@ class FeatureConfig:
     retry: Optional[RetryConfig] = None
     timeout: Optional[TimeoutConfig] = None
     monitoring: Optional[MonitoringConfig] = None
+    circuit_breaker: Optional[CircuitBreakerConfig] = None
 
     # Compiled properties (set during feature compilation)
     rate_limiter: Optional[Any] = field(default=None, init=False)
+    circuit_breaker_instance: Optional[CircuitBreaker] = field(default=None, init=False)
 
     def get_applicable_features(self) -> List[str]:
         """Get list of features that are configured for this feature config."""
@@ -251,6 +272,8 @@ class FeatureConfig:
             features.append("cache")
         if self.monitoring is not None:
             features.append("monitoring")
+        if self.circuit_breaker is not None:
+            features.append("circuit_breaker")
         return features
 
 
@@ -269,6 +292,7 @@ class GatewayConfig:
     paths: List[PathConfig]
     default_features: Optional[FeatureConfig] = None
     keyspace: str = "asgi-gateway"
+    servers: Optional[List[str]] = None
 
     @classmethod
     def from_file(
@@ -348,6 +372,7 @@ class GatewayConfig:
             paths=paths,
             default_features=default_features,
             keyspace=data.get("keyspace", "asgi-gateway"),
+            servers=data.get("servers", None),
         )
 
     @staticmethod
@@ -405,12 +430,23 @@ class GatewayConfig:
                 log_threshold=monitoring_data.get("log_threshold", 0.1)
             )
 
+        # Parse circuit breaker config
+        circuit_breaker = None
+        if "circuit_breaker" in features_data:
+            cb_data = features_data["circuit_breaker"]
+            circuit_breaker = CircuitBreakerConfig(
+                failure_threshold=cb_data.get("failure_threshold", 5),
+                recovery_timeout=cb_data.get("recovery_timeout", 60.0),
+                expected_exception=Exception,  # Can't serialize exception types in YAML
+            )
+
         return FeatureConfig(
             cache=cache,
             retry=retry,
             timeout=timeout,
             rate_limit=rate_limit,
             monitoring=monitoring,
+            circuit_breaker=circuit_breaker,
         )
 
 
@@ -469,7 +505,11 @@ class ASGIGateway:
         self._dashboard_service = DashboardService(config_file_path)
         self._stats_enabled = True
 
-        if servers:
+        # Check servers from config if not provided in constructor
+        if servers is None and config.servers:
+            self.servers = config.servers
+
+        if self.servers:
             from .forward import ForwardService
 
             # Initialize forward service
@@ -524,6 +564,16 @@ class ASGIGateway:
 
             compiled.rate_limiter = limiter
 
+        # Compile circuit breaker
+        if feature_config.circuit_breaker is not None:
+            cb_config = feature_config.circuit_breaker
+            circuit_breaker = CircuitBreaker(
+                failure_threshold=cb_config.failure_threshold,
+                recovery_timeout=cb_config.recovery_timeout,
+                expected_exception=cb_config.expected_exception,
+            )
+            compiled.circuit_breaker_instance = circuit_breaker
+
         return compiled
 
     def _match_path(self, path: str) -> Optional[FeatureConfig]:
@@ -572,6 +622,7 @@ class ASGIGateway:
         handler = apply_monitoring(handler, feature_config.monitoring)
         handler = apply_cache(handler, feature_config.cache, self._cache_provider)
         handler = apply_rate_limit(handler, feature_config.rate_limiter)
+        handler = apply_circuit_breaker(handler, feature_config.circuit_breaker_instance)
         handler = apply_retry_wrapper(handler, feature_config.retry)
         handler = apply_timeout(handler, feature_config.timeout)
 

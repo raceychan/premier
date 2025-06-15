@@ -1,5 +1,40 @@
 # CHANGELOG
 
+## version 0.4.9 (2025-06-14)
+
+### Bug Fixes & Features
+
+- **Dashboard Stats Tracking** - Fixed dashboard statistics tracking issues and improved real-time data accuracy
+- **Dashboard Styling & Theme** - Enhanced dashboard visual appearance with improved styling and theme consistency
+- ️**Configurable Server List** – Users can now define and manage servers directly from a configuration file
+
+- **Load Balancing (Round Robin)** – Implemented round robin load balancer for distributing traffic evenly across servers
+
+- ️**Circuit Breaker Support** – Added circuit breaker mechanism to improve fault tolerance and system resilience
+
+### Refactoring
+
+- **🔧 ASGI Architecture Refactor** - Major restructuring of ASGI components for better maintainability:
+  - Separated forward service logic into dedicated module (`premier/asgi/forward.py`)
+  - Created dedicated dashboard service (`premier/dashboard/service.py`) 
+  - Implemented load balancer component (`premier/asgi/loadbalancer.py`)
+  - Simplified main gateway module by extracting specialized services
+  - Improved code organization and separation of concerns
+
+### Chores
+
+- **📄 License** - Added LICENSE file to the project
+- **📖 Documentation** - Updated README.md with latest information
+- **📋 Changelog** - Updated changelog documentation
+- **📸 Dashboard Screenshots** - Added new dashboard screenshots showing configuration and statistics views
+
+### Technical Improvements
+
+- Enhanced dashboard service architecture with better separation of concerns
+- Improved ASGI gateway performance through modular design
+- Better error handling and logging in dashboard components
+- Streamlined configuration management in dashboard
+
 ## version 0.4.8 (2025-06-14)
 
 ### Major Features

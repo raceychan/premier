@@ -310,10 +310,13 @@ if __name__ == "__main__":
 
 - [x] Web GUI
 - [x] Websocket Support
-- [ ] Circuit Breaker
-- [ ] Load Balancer
+- [x] Load Balancer
+- [x] Circuit Breaker
 - [ ] Auth(OAuth, jwt, etc.)
 - [ ] MCP integration
+
+
+
 
 
 ## License

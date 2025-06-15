@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import time
 from collections.abc import Callable
 from typing import Awaitable, Optional, TypeVar, Union
 
@@ -19,12 +20,12 @@ def _wait_time_calculator_factory(wait: WaitStrategy) -> Callable[[int], float]:
     match wait:
         case int():
 
-            def algo(attempts: int) -> float:
+            def algo(_: int) -> float:
                 return wait
 
         case float():
 
-            def algo(attempts: int) -> float:
+            def algo(_: int) -> float:
                 return wait
 
         case list():
@@ -101,3 +102,75 @@ def retry(
         return wrapper
 
     return decorator
+
+
+class CircuitBreaker:
+    """Circuit breaker implementation for fault tolerance."""
+    
+    def __init__(
+        self,
+        failure_threshold: int = 5,
+        recovery_timeout: float = 60.0,
+        expected_exception: type[Exception] = Exception,
+    ):
+        """
+        Initialize circuit breaker.
+        
+        Args:
+            failure_threshold: Number of failures before opening circuit
+            recovery_timeout: Time in seconds before attempting to recover
+            expected_exception: Exception type to track for failures
+        """
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.expected_exception = expected_exception
+        
+        self.failure_count = 0
+        self.last_failure_time: Optional[float] = None
+        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
+    
+    def __call__(self, func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
+        """Decorate function with circuit breaker."""
+        @functools.wraps(func)
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+            if self.state == "OPEN":
+                if self._should_attempt_reset():
+                    self.state = "HALF_OPEN"
+                else:
+                    raise CircuitBreakerOpenException(
+                        f"Circuit breaker is OPEN. Last failure: {self.last_failure_time}"
+                    )
+            
+            try:
+                result = await func(*args, **kwargs)
+                self._on_success()
+                return result
+            except self.expected_exception as e:
+                self._on_failure()
+                raise e
+        
+        return wrapper
+    
+    def _should_attempt_reset(self) -> bool:
+        """Check if enough time has passed to attempt reset."""
+        if self.last_failure_time is None:
+            return True
+        return time.time() - self.last_failure_time >= self.recovery_timeout
+    
+    def _on_success(self):
+        """Handle successful function call."""
+        self.failure_count = 0
+        self.state = "CLOSED"
+    
+    def _on_failure(self):
+        """Handle failed function call."""
+        self.failure_count += 1
+        self.last_failure_time = time.time()
+        
+        if self.failure_count >= self.failure_threshold:
+            self.state = "OPEN"
+
+
+class CircuitBreakerOpenException(Exception):
+    """Exception raised when circuit breaker is open."""
+    pass

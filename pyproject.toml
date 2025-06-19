@@ -2,7 +2,10 @@
 name = "premier"
 dynamic = ["version"]
 description = "an extendable toolbox for scalable apis"
-dependencies = ["pyyaml>=6.0.2", "typing-extensions>=4.14.0"]
+dependencies = [
+    "pyyaml>=6.0.2",
+ "typing-extensions>=4.14.0",
+]
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [

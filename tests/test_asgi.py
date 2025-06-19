@@ -157,21 +157,7 @@ class TestConfigDataclasses:
         config = MonitoringConfig()
         assert config.log_threshold == 0.1
 
-    def test_get_applicable_features_empty(self):
-        feature = FeatureConfig()
-        assert feature.get_applicable_features() == []
 
-    def test_get_applicable_features_with_values(self):
-        feature = FeatureConfig(
-            timeout=TimeoutConfig(seconds=5.0),
-            cache=CacheConfig(expire_s=300),
-            monitoring=MonitoringConfig(log_threshold=0.1),
-        )
-        features = feature.get_applicable_features()
-        assert "timeout" in features
-        assert "cache" in features
-        assert "monitoring" in features
-        assert len(features) == 3
 
 
 class TestASGIGateway:

@@ -122,13 +122,7 @@ class TestCircuitBreakerConfig:
         assert feature_config.circuit_breaker == cb_config
         assert feature_config.circuit_breaker_instance is None  # Not compiled yet
 
-    def test_feature_config_get_applicable_features_includes_circuit_breaker(self):
-        """Test get_applicable_features includes circuit_breaker."""
-        cb_config = CircuitBreakerConfig()
-        feature_config = FeatureConfig(circuit_breaker=cb_config)
-        
-        features = feature_config.get_applicable_features()
-        assert "circuit_breaker" in features
+
 
     def test_gateway_config_parse_features_circuit_breaker(self):
         """Test _parse_features parses circuit breaker config."""

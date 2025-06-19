@@ -1,9 +1,10 @@
 # Premier
+
 [![PyPI version](https://badge.fury.io/py/premier.svg)](https://badge.fury.io/py/premier)
 [![Python Version](https://img.shields.io/pypi/pyversions/premier.svg)](https://pypi.org/project/premier/)
 [![License](https://img.shields.io/github/license/raceychan/premier)](https://github.com/raceychan/premier/blob/master/LICENSE)
 
---- 
+---
 
 Premier is a versatile Python toolkit that can be used in three main ways:
 
@@ -13,13 +14,11 @@ Premier is a versatile Python toolkit that can be used in three main ways:
 
 Premier transforms any Python web application into a full-featured API gateway with caching, rate limiting, retry logic, timeouts, and performance monitoring.
 
-
 ## Documentation
 
 - **[Web Dashboard](docs/web-gui.md)** - Real-time monitoring and configuration management
 - **[Examples](docs/examples.md)** - Complete examples and tutorials
 - **[Configuration Guide](docs/configuration.md)** - YAML configuration reference
-
 
 ## Features
 
@@ -34,12 +33,12 @@ Premier provides enterprise-grade API gateway functionality with:
 
 ... and more
 
-
 ## Why Premier
 
 Premier is designed for **simplicity and accessibility** - perfect for simple applications that need API gateway functionality without introducing complex tech stacks like Kong, Ambassador, or Istio.
 
 **Key advantages:**
+
 - **Zero Code Changes** - Wrap existing ASGI apps without modifications
 - **Simple Setup** - Single dependency, no external services required
 - **Dual Mode Operation** - Plugin for existing apps OR standalone gateway
@@ -48,7 +47,6 @@ Premier is designed for **simplicity and accessibility** - perfect for simple ap
 - **Hot Reloadable** - Update configurations without restarts
 
 ## Quick Start
-
 
 ### Plugin Mode (Recommended)
 
@@ -71,6 +69,7 @@ Premier is designed for **simplicity and accessibility** - perfect for simple ap
 ```
 
 You can keep your existing app.py file untouched
+
 ```python
 # app.py
 from premier.asgi import ASGIGateway, GatewayConfig
@@ -95,7 +94,6 @@ app = ASGIGateway(config=config, app=app)
 ```
 
 Then, instead of serving the original app directly, serve the one wrapped with ASGIGateway.
-
 
 ### Standalone Mode
 
@@ -125,7 +123,6 @@ Then, instead of serving the original app directly, serve the one wrapped with A
             └───────────────┘          └───────────────┘
 ```
 
-
 ```python
 # main.py
 from premier.asgi import ASGIGateway, GatewayConfig
@@ -141,7 +138,6 @@ uvicorn src:main
 ### Decorator Mode
 
 **How it works:** Apply Premier features directly to individual functions with decorators - no ASGI app required
-
 
 ### WebSocket Support
 
@@ -169,7 +165,7 @@ Configure gateway policies declaratively:
 ```yaml
 premier:
   keyspace: "my-api"
-  
+
   paths:
     - pattern: "/api/users/*"
       features:
@@ -186,7 +182,7 @@ premier:
           wait: 1.0
         monitoring:
           log_threshold: 0.1
-    
+
     - pattern: "/api/admin/*"
       features:
         rate_limit:
@@ -195,7 +191,7 @@ premier:
           algorithm: "token_bucket"
         timeout:
           seconds: 30.0
-    
+
     - pattern: "/ws/*"
       features:
         rate_limit:
@@ -204,7 +200,7 @@ premier:
           algorithm: "sliding_window"
         monitoring:
           log_threshold: 1.0
-  
+
   default_features:
     timeout:
       seconds: 10.0
@@ -219,6 +215,7 @@ pip install premier
 ```
 
 For Redis support (optional):
+
 ```bash
 pip install premier[redis]
 ```
@@ -312,11 +309,8 @@ if __name__ == "__main__":
 - [x] Load Balancer
 - [x] Circuit Breaker
 - [ ] Auth(OAuth, jwt, etc.)
+- [ ] Authorization, Access control(RBAC, ABAC, Whitelist, etc.)
 - [ ] MCP integration
-
-
-
-
 
 ## License
 

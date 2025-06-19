@@ -11,11 +11,11 @@ import yaml
 from ..cache import Cache
 from ..dashboard import DashboardService
 from ..providers import AsyncCacheProvider, AsyncInMemoryCache
-from ..retry import retry, CircuitBreaker
+from ..retry import CircuitBreaker, retry
 from ..throttler import Throttler
 from ..throttler.handler import AsyncDefaultHandler
 from ..timer import ILogger
-from .loadbalancer import ILoadBalancer, RandomLoadBalancer, RoundRobinLoadBalancer, create_random_load_balancer, create_round_robin_load_balancer
+from .loadbalancer import ILoadBalancer, RandomLoadBalancer
 
 # from urllib.parse import urljoin, urlparse
 
@@ -177,7 +177,7 @@ def apply_cache(
         # Try to get cached response
         cached_response = await cache_provider.get(cache_key)
         scope["_cache_hit"] = cached_response is not None
-        
+
         if scope["_cache_hit"]:
             # Send cached response
             await send(cached_response["start"])
@@ -216,7 +216,6 @@ def apply_monitoring(
         return handler
 
     async def monitor_wrapper(scope: dict, receive: Callable, send: Callable):
-
         path = scope.get("path", "/")
         method = scope.get("method", "GET")
         request_key = f"{method}:{path}"
@@ -253,25 +252,8 @@ class FeatureConfig:
     circuit_breaker: Optional[CircuitBreakerConfig] = None
 
     # Compiled properties (set during feature compilation)
-    rate_limiter: Optional[Any] = field(default=None, init=False)
+    rate_limiter: Optional[Callable[..., Any]] = field(default=None, init=False)
     circuit_breaker_instance: Optional[CircuitBreaker] = field(default=None, init=False)
-
-    def get_applicable_features(self) -> List[str]:
-        """Get list of features that are configured for this feature config."""
-        features = []
-        if self.timeout is not None:
-            features.append("timeout")
-        if self.retry is not None:
-            features.append("retry")
-        if self.rate_limiter is not None:
-            features.append("rate_limit")
-        if self.cache is not None:
-            features.append("cache")
-        if self.monitoring is not None:
-            features.append("monitoring")
-        if self.circuit_breaker is not None:
-            features.append("circuit_breaker")
-        return features
 
 
 @dataclass
@@ -619,7 +601,9 @@ class ASGIGateway:
         handler = apply_monitoring(handler, feature_config.monitoring)
         handler = apply_cache(handler, feature_config.cache, self._cache_provider)
         handler = apply_rate_limit(handler, feature_config.rate_limiter)
-        handler = apply_circuit_breaker(handler, feature_config.circuit_breaker_instance)
+        handler = apply_circuit_breaker(
+            handler, feature_config.circuit_breaker_instance
+        )
         handler = apply_retry_wrapper(handler, feature_config.retry)
         handler = apply_timeout(handler, feature_config.timeout)
 
@@ -786,7 +770,7 @@ class ASGIGateway:
             method = scope.get("method", "GET")
             start_time = time.time()
             status = 200
-            
+
             # Track response info
             async def tracking_send(message):
                 nonlocal status

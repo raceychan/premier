@@ -20,9 +20,13 @@ Premier comes with a nice dashboard for you to monitor your requests
 
 ## Documentation
 
-- **[Web Dashboard](docs/web-gui.md)** - Real-time monitoring and configuration management
-- **[Examples](docs/examples.md)** - Complete examples and tutorials
-- **[Configuration Guide](docs/configuration.md)** - YAML configuration reference
+📚 **[Complete Documentation Site](https://raceychan.github.io/premier)** - Full documentation with examples, tutorials, and API reference
+
+Quick links:
+- **[Installation & Quick Start](https://raceychan.github.io/premier/quickstart/)** - Get started in minutes
+- **[Configuration Guide](https://raceychan.github.io/premier/configuration/)** - Complete YAML configuration reference
+- **[Web Dashboard](https://raceychan.github.io/premier/web-gui/)** - Real-time monitoring and configuration management
+- **[Examples](https://raceychan.github.io/premier/examples/)** - Complete examples and tutorials
 
 ## Features
 

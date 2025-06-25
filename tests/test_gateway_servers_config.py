@@ -205,7 +205,7 @@ class TestCircuitBreakerConfig:
             await gateway(scope, receive, send)
         
         # Third call should be blocked by circuit breaker
-        from premier.retry import CircuitBreakerOpenException
+        from premier.features.retry import CircuitBreakerOpenException
         with pytest.raises(CircuitBreakerOpenException):
             await gateway(scope, receive, send)
 

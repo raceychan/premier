@@ -8,16 +8,14 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 
 import yaml
 
-from ..cache import Cache
 from ..dashboard import DashboardService
+from ..features.cache import Cache
+from ..features.retry import CircuitBreaker, retry
+from ..features.throttler import QuotaExceedsError, Throttler
+from ..features.throttler.handler import AsyncDefaultHandler
+from ..features.timer import ILogger
 from ..providers import AsyncCacheProvider, AsyncInMemoryCache
-from ..retry import CircuitBreaker, retry
-from ..throttler import Throttler
-from ..throttler.handler import AsyncDefaultHandler
-from ..timer import ILogger
 from .loadbalancer import ILoadBalancer, RandomLoadBalancer
-
-# from urllib.parse import urljoin, urlparse
 
 
 @dataclass
@@ -57,6 +55,8 @@ class TimeoutConfig:
 
     seconds: float
     logger: Optional[ILogger] = None
+    error_status: int = 504
+    error_message: str = "Request timeout"
 
 
 @dataclass
@@ -67,6 +67,8 @@ class RateLimitConfig:
     duration: int
     algorithm: str = "fixed_window"
     bucket_size: Optional[int] = None
+    error_status: int = 429
+    error_message: str = "Rate limit exceeded"
 
 
 @dataclass
@@ -74,6 +76,32 @@ class MonitoringConfig:
     """Monitoring configuration."""
 
     log_threshold: float = 0.1
+
+
+
+
+async def send_error_response(
+    send: Callable, status: int, message: str, content_type: str = "application/json"
+):
+    """Send a standardized error response."""
+    if content_type == "application/json":
+        body = f'{{"error": "{message}"}}'.encode()
+    else:
+        body = message.encode()
+    
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status,
+            "headers": [[b"content-type", content_type.encode()]],
+        }
+    )
+    await send(
+        {
+            "type": "http.response.body",
+            "body": body,
+        }
+    )
 
 
 def apply_timeout(
@@ -93,18 +121,8 @@ def apply_timeout(
                 timeout_config.logger.exception(
                     f"Request timeout after {timeout_config.seconds}s"
                 )
-            await send(
-                {
-                    "type": "http.response.start",
-                    "status": 504,
-                    "headers": [[b"content-type", b"application/json"]],
-                }
-            )
-            await send(
-                {
-                    "type": "http.response.body",
-                    "body": b'{"error": "Request timeout"}',
-                }
+            await send_error_response(
+                send, timeout_config.error_status, timeout_config.error_message
             )
 
     return timeout_wrapper
@@ -126,7 +144,9 @@ def apply_retry_wrapper(
     )(handler)
 
 
-def apply_rate_limit(handler: Callable, rate_limiter: Optional[Any]) -> Callable:
+def apply_rate_limit(
+    handler: Callable, rate_limiter: Optional[Callable], rate_limit_config: Optional[RateLimitConfig]
+) -> Callable:
     """Apply rate limiting wrapper to handler."""
     if rate_limiter is None:
         return handler
@@ -136,26 +156,21 @@ def apply_rate_limit(handler: Callable, rate_limiter: Optional[Any]) -> Callable
     async def rate_limit_wrapper(scope: dict, receive: Callable, send: Callable):
         try:
             await handler(scope, receive, send)
-        except Exception:
-            await send(
-                {
-                    "type": "http.response.start",
-                    "status": 429,
-                    "headers": [[b"content-type", b"application/json"]],
-                }
-            )
-            await send(
-                {
-                    "type": "http.response.body",
-                    "body": b'{"error": "Rate limit exceeded"}',
-                }
-            )
+        except QuotaExceedsError:
+            if rate_limit_config:
+                await send_error_response(
+                    send, rate_limit_config.error_status, rate_limit_config.error_message
+                )
+            else:
+                await send_error_response(send, 429, "Rate limit exceeded")
 
     return rate_limit_wrapper
 
 
 def apply_cache(
-    handler: Callable, cache_config: Optional[CacheConfig], cache_provider
+    handler: Callable,
+    cache_config: Optional[CacheConfig],
+    cache_provider: AsyncCacheProvider,
 ) -> Callable:
     """Apply caching wrapper to handler."""
     if cache_config is None:
@@ -388,6 +403,8 @@ class GatewayConfig:
             timeout = TimeoutConfig(
                 seconds=timeout_data["seconds"],
                 logger=None,  # Logger instances can't be serialized in TOML
+                error_status=timeout_data.get("error_status", 504),
+                error_message=timeout_data.get("error_message", "Request timeout"),
             )
 
         # Parse rate limit config
@@ -399,6 +416,8 @@ class GatewayConfig:
                 duration=rate_limit_data["duration"],
                 algorithm=rate_limit_data.get("algorithm", "fixed_window"),
                 bucket_size=rate_limit_data.get("bucket_size"),
+                error_status=rate_limit_data.get("error_status", 429),
+                error_message=rate_limit_data.get("error_message", "Rate limit exceeded"),
             )
 
         # Parse monitoring config
@@ -573,19 +592,8 @@ class ASGIGateway:
             await self.app(scope, receive, send)
         else:
             # Default response if no downstream app or servers
-            response = b'{"error": "No downstream application or servers configured"}'
-            await send(
-                {
-                    "type": "http.response.start",
-                    "status": 404,
-                    "headers": [[b"content-type", b"application/json"]],
-                }
-            )
-            await send(
-                {
-                    "type": "http.response.body",
-                    "body": response,
-                }
+            await send_error_response(
+                send, 404, "No downstream application or servers configured"
             )
 
     def _get_compiled_handler(self, feature_config: FeatureConfig) -> Callable:
@@ -600,7 +608,7 @@ class ASGIGateway:
         # Apply features in reverse order since each wraps the previous
         handler = apply_monitoring(handler, feature_config.monitoring)
         handler = apply_cache(handler, feature_config.cache, self._cache_provider)
-        handler = apply_rate_limit(handler, feature_config.rate_limiter)
+        handler = apply_rate_limit(handler, feature_config.rate_limiter, feature_config.rate_limit)
         handler = apply_circuit_breaker(
             handler, feature_config.circuit_breaker_instance
         )
@@ -647,18 +655,8 @@ class ASGIGateway:
                 await self.app(scope, receive, send)
             else:
                 # Default response
-                await send(
-                    {
-                        "type": "http.response.start",
-                        "status": 200,
-                        "headers": [[b"content-type", b"text/plain"]],
-                    }
-                )
-                await send(
-                    {
-                        "type": "http.response.body",
-                        "body": b"ASGI Gateway - No features configured",
-                    }
+                await send_error_response(
+                    send, 200, "ASGI Gateway - No features configured", "text/plain"
                 )
 
     def set_downstream_app(self, app: Callable):

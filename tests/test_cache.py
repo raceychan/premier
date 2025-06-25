@@ -3,7 +3,7 @@ import pytest
 import time
 from unittest.mock import AsyncMock
 
-from premier.cache import Cache, _make_cache_key
+from premier.features.cache import Cache, _make_cache_key
 from premier.providers.memory import AsyncInMemoryCache
 
 

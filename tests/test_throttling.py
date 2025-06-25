@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from premier import QuotaExceedsError, Throttler
-from premier.throttler import handler
+from premier.features.throttler import handler
 
 
 def _keymaker(a: int, b: int) -> str:
@@ -54,8 +54,8 @@ async def test_throttler_do_not_raise_error():
     from unittest.mock import Mock
 
     from premier.providers import AsyncInMemoryCache
-    from premier.throttler.handler import AsyncDefaultHandler
-    from premier.throttler.throttler import Throttler
+    from premier.features.throttler.handler import AsyncDefaultHandler
+    from premier.features.throttler.throttler import Throttler
 
     # Create a mock timer that returns values in sequence
     mock_timer = Mock()
@@ -119,8 +119,8 @@ async def test_throttler_with_token_bucket():
     from unittest.mock import Mock
 
     from premier.providers import AsyncInMemoryCache
-    from premier.throttler.handler import AsyncDefaultHandler
-    from premier.throttler.throttler import Throttler
+    from premier.features.throttler.handler import AsyncDefaultHandler
+    from premier.features.throttler.throttler import Throttler
 
     # Create a mock timer that returns values in sequence
     mock_timer = Mock()

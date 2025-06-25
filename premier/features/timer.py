@@ -1,3 +1,4 @@
+import asyncio
 from asyncio import wait_for as await_for
 from contextlib import contextmanager
 from functools import wraps
@@ -6,6 +7,7 @@ from time import perf_counter
 from typing import Any, Awaitable, Callable, Optional, Protocol, cast, overload
 
 from premier.interface import FlexDecor, P, R
+from premier.features.timer_errors import TimeoutError as PremierTimeoutError
 
 
 class ILogger(Protocol):
@@ -111,10 +113,11 @@ def timeout(seconds: int, *, logger: ILogger | None = None):
             coro = func(*args, **kwargs)
             try:
                 res = await await_for(coro, seconds)
-            except TimeoutError as te:
+            except asyncio.TimeoutError as te:
+                timeout_error = PremierTimeoutError(seconds, func.__name__)
                 if logger:
-                    logger.exception(f"{func} timeout after {seconds}s")
-                raise te
+                    logger.exception(str(timeout_error))
+                raise timeout_error from te
             return res
 
         return async_timeout

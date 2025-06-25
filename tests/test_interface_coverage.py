@@ -2,7 +2,7 @@ import pytest
 from types import FunctionType, MethodType
 from typing import Any, Dict
 
-from premier.throttler.interface import (
+from premier.features.throttler.interface import (
     _func_keymaker,
     _make_key,
     ThrottleAlgo,
@@ -304,7 +304,7 @@ class TestAlgoTypeEnum:
 class TestProtocols:
     def test_sync_func_protocol(self):
         """Test SyncFunc protocol compliance"""
-        from premier.throttler.interface import SyncFunc
+        from premier.features.throttler.interface import SyncFunc
         
         def test_func(x: int, y: str) -> bool:
             return True
@@ -319,7 +319,7 @@ class TestProtocols:
         
     def test_async_func_protocol(self):
         """Test AsyncFunc protocol compliance"""
-        from premier.throttler.interface import AsyncFunc
+        from premier.features.throttler.interface import AsyncFunc
         import asyncio
         
         async def test_async_func(x: int, y: str) -> bool:
@@ -341,7 +341,7 @@ class TestProtocols:
 class TestThrottleHandlerDispatch:
     def test_async_throttle_handler_dispatch_fixed_window(self):
         """Test AsyncThrottleHandler dispatch for fixed window"""
-        from premier.throttler.interface import AsyncThrottleHandler
+        from premier.features.throttler.interface import AsyncThrottleHandler
         
         class MockAsyncHandler(AsyncThrottleHandler):
             async def fixed_window(self, key: str, quota: int, duration: int):
@@ -377,7 +377,7 @@ class TestThrottleHandlerDispatch:
             
     def test_async_throttle_handler_dispatch(self):
         """Test AsyncThrottleHandler dispatch"""
-        from premier.throttler.interface import AsyncThrottleHandler
+        from premier.features.throttler.interface import AsyncThrottleHandler
         
         class MockAsyncHandler(AsyncThrottleHandler):
             async def fixed_window(self, key: str, quota: int, duration: int):

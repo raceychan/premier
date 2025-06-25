@@ -4,9 +4,9 @@ from functools import wraps
 from typing import Awaitable, Callable
 
 from premier.providers import AsyncInMemoryCache
-from premier.throttler.errors import QuotaExceedsError, UninitializedHandlerError
-from premier.throttler.handler import AsyncDefaultHandler
-from premier.throttler.interface import (
+from premier.features.throttler.errors import QuotaExceedsError, UninitializedHandlerError
+from premier.features.throttler.handler import AsyncDefaultHandler
+from premier.features.throttler.interface import (
     AsyncThrottleHandler,
     KeyMaker,
     P,

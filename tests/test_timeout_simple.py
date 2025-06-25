@@ -2,7 +2,8 @@ import asyncio
 import pytest
 from unittest.mock import Mock
 
-from premier.timer import timeout
+from premier.features.timer import timeout
+from premier.features.timer_errors import TimeoutError as PremierTimeoutError
 
 
 @pytest.mark.asyncio
@@ -25,7 +26,7 @@ async def test_timeout_exceeds():
         await asyncio.sleep(2)  # 2 second operation
         return "should not reach"
     
-    with pytest.raises(asyncio.TimeoutError):
+    with pytest.raises(PremierTimeoutError):
         await slow_func()
 
 
@@ -40,7 +41,7 @@ async def test_timeout_with_logger():
         await asyncio.sleep(2)
         return "result"
     
-    with pytest.raises(asyncio.TimeoutError):
+    with pytest.raises(PremierTimeoutError):
         await slow_func()
     
     # The logger call may be implementation-specific, so we just check it's available
@@ -96,7 +97,7 @@ async def test_timeout_zero_seconds():
     async def instant_func():
         return "instant"
     
-    with pytest.raises(asyncio.TimeoutError):
+    with pytest.raises(PremierTimeoutError):
         await instant_func()
 
 
@@ -107,5 +108,5 @@ async def test_timeout_negative_seconds():
     async def negative_timeout_func():
         return "should timeout immediately"
     
-    with pytest.raises(asyncio.TimeoutError):
+    with pytest.raises(PremierTimeoutError):
         await negative_timeout_func()

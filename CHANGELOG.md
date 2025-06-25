@@ -1,5 +1,49 @@
 # CHANGELOG
 
+## version 0.4.10 (2025-06-25)
+
+### Features
+
+- **🔧 Customizable Error Responses** - Added configurable error status codes and messages for ASGI Gateway features:
+  - `TimeoutConfig` now supports `error_status` and `error_message` fields (defaults: 504, "Request timeout")
+  - `RateLimitConfig` now supports `error_status` and `error_message` fields (defaults: 429, "Rate limit exceeded")
+  - Users can customize error responses in YAML configuration files
+  - Example:
+    ```yaml
+    timeout:
+      seconds: 5.0
+      error_status: 408
+      error_message: "Custom timeout message"
+    rate_limit:
+      quota: 100
+      duration: 60
+      error_status: 503
+      error_message: "Service temporarily unavailable"
+    ```
+
+### Refactoring
+
+- **📦 Features Directory Restructuring** - Major code organization improvements:
+  - Moved core features to dedicated `premier/features/` directory
+  - `premier/cache.py` → `premier/features/cache.py`
+  - `premier/retry.py` → `premier/features/retry.py`
+  - `premier/timer.py` → `premier/features/timer.py`
+  - `premier/throttler/` → `premier/features/throttler/`
+  - Updated all imports and dependencies accordingly
+
+- **🛠️ Error Response Encapsulation** - Eliminated duplicate error response code:
+  - Created reusable `send_error_response()` function in ASGI Gateway
+  - Standardized error responses across timeout, rate limiting, and default handlers
+  - Supports both JSON and plain text content types
+  - Reduced code duplication and improved maintainability
+
+### Technical Improvements
+
+- Enhanced ASGI Gateway architecture with better error handling patterns
+- Improved configuration parsing for new error response fields
+- All existing tests continue to pass with new functionality
+- Better separation of concerns in error response management
+
 ## version 0.4.9 (2025-06-14)
 
 ### Bug Fixes & Features

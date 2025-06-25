@@ -10,7 +10,7 @@ Premier provides a built-in web dashboard for monitoring and managing your API g
 ## Features
 
 - **Real-time Monitoring** - Live request/response metrics and performance data
-![stats](/docs/images/dashboard_stats.png)
+![stats](/docs/images/dashboard.png)
 - **Configuration Management** - View and update gateway configuration
 ![config](/docs/images/dashboard_config.png)
 - **Request Analytics** - Detailed request logs and statistics

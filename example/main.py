@@ -14,8 +14,9 @@ Then visit:
 """
 
 from pathlib import Path
-from premier.asgi import ASGIGateway, GatewayConfig
+
 from example.fastapi.app import app
+from premier.asgi import ASGIGateway, GatewayConfig
 
 # Load configuration
 config_path = Path(__file__).parent / "gateway.yaml"
@@ -25,7 +26,7 @@ config = GatewayConfig.from_file(config_path)
 gateway = ASGIGateway(
     config=config,
     app=app,
-    config_file_path=str(config_path.resolve())  # Use absolute path
+    config_file_path=str(config_path.resolve()),  # Use absolute path
 )
 
 # Export for uvicorn
@@ -33,16 +34,13 @@ app = gateway
 
 if __name__ == "__main__":
     import uvicorn
+
     print("🚀 Starting Premier API Gateway Example")
     print("📊 Dashboard: http://localhost:8000/premier/dashboard")
     print("🔧 API Docs: http://localhost:8000/docs")
     print("💚 Health: http://localhost:8000/health")
     print()
-    
+
     uvicorn.run(
-        "main:gateway",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
+        "main:gateway", host="0.0.0.0", port=8000, reload=True, log_level="info"
     )

@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from premier.providers import AsyncInMemoryCache
-from premier.throttler.handler import AsyncDefaultHandler
-from premier.throttler.throttler import Throttler
+from premier.features.throttler.handler import AsyncDefaultHandler
+from premier.features.throttler.throttler import Throttler
 
 
 def read_envs(file: Path) -> dict[str, str]:

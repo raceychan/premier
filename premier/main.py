@@ -1,11 +1,11 @@
 from typing import Optional
 
-from premier.cache import Cache
+from premier.features.cache import Cache
 from premier.providers import AsyncCacheProvider, AsyncInMemoryCache
-from premier.retry import retry
-from premier.throttler import Throttler, ThrottleAlgo, KeyMaker
-from premier.throttler.handler import AsyncDefaultHandler
-from premier.timer import timeout, timeit, ILogger
+from premier.features.retry import retry
+from premier.features.throttler import Throttler, ThrottleAlgo, KeyMaker
+from premier.features.throttler.handler import AsyncDefaultHandler
+from premier.features.timer import timeout, timeit, ILogger
 
 
 class Premier:

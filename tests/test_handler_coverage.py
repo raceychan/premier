@@ -4,8 +4,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from premier.throttler.errors import QuotaExceedsError
-from premier.throttler.handler import AsyncDefaultHandler
+from premier.features.throttler.errors import QuotaExceedsError
+from premier.features.throttler.handler import AsyncDefaultHandler
 
 
 class TestAsyncDefaultHandler:

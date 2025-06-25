@@ -1,11 +1,8 @@
+from .asgi.gateway import ASGIGateway as ASGIGateway
 from .main import Premier as Premier
-from .throttler.api import fixed_window as fixed_window
-from .throttler.api import leaky_bucket as leaky_bucket
-from .throttler.api import sliding_window as sliding_window
-from .throttler.api import token_bucket as token_bucket
-from .throttler.errors import QuotaExceedsError as QuotaExceedsError
-from .throttler.throttler import Throttler as Throttler
-from .timer import ILogger as ILogger
+from .features.throttler.errors import QuotaExceedsError as QuotaExceedsError
+from .features.throttler.throttler import Throttler as Throttler
+from .features.timer import ILogger as ILogger
 
-VERSION = "0.4.9"
+VERSION = "0.4.10"
 __version__ = VERSION

@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock
 
 from premier import Premier
 from premier.providers.memory import AsyncInMemoryCache
-from premier.throttler.errors import QuotaExceedsError
+from premier.features.throttler.errors import QuotaExceedsError
+from premier.features.timer_errors import TimeoutError as PremierTimeoutError
 
 
 class TestPremierFacade:
@@ -129,7 +130,7 @@ class TestPremierFacade:
             return "too slow"
         
         async def run_test():
-            with pytest.raises(asyncio.TimeoutError):
+            with pytest.raises(PremierTimeoutError):
                 await slow_function()
         
         asyncio.run(run_test())
@@ -183,7 +184,7 @@ class TestPremierFacade:
     @pytest.mark.asyncio
     async def test_generic_throttle_method(self, premier):
         """Test generic throttle method through facade."""
-        from premier.throttler import ThrottleAlgo
+        from premier.features.throttler import ThrottleAlgo
         
         @premier.throttle(
             algo=ThrottleAlgo.TOKEN_BUCKET,

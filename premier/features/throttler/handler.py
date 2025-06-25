@@ -2,8 +2,8 @@ import time
 
 from premier._logs import logger as logger
 from premier.providers import AsyncCacheProvider
-from premier.throttler.errors import QuotaExceedsError
-from premier.throttler.interface import (
+from premier.features.throttler.errors import QuotaExceedsError
+from premier.features.throttler.interface import (
     AsyncThrottleHandler,
     CountDown,
 )

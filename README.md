@@ -14,6 +14,10 @@ Premier is a versatile Python toolkit that can be used in three main ways:
 
 Premier transforms any Python web application into a full-featured API gateway with caching, rate limiting, retry logic, timeouts, and performance monitoring.
 
+Premier comes with a nice dashboard for you to monitor your requests
+
+![image](/docs/images/dashboard.png)
+
 ## Documentation
 
 - **[Web Dashboard](docs/web-gui.md)** - Real-time monitoring and configuration management
@@ -24,10 +28,10 @@ Premier transforms any Python web application into a full-featured API gateway w
 
 Premier provides enterprise-grade API gateway functionality with:
 
-- **API Gateway Features** - Caching, rate limiting, retry logic, and timeout protection
+- **API Gateway Features** - caching, rate limiting, retry logic, and timeout, etc.
+- **Path-Based Policies** - Different features per route with regex matching
 - **Load Balancing & Circuit Breaker** - Round robin load balancing with fault tolerance
 - **WebSocket Support** - Full WebSocket proxying with rate limiting and monitoring
-- **Path-Based Policies** - Different features per route with regex matching
 - **Web Dashboard** - Built-in web GUI for monitoring and configuration management
 - **YAML Configuration** - Declarative configuration with namespace support
 
@@ -207,6 +211,140 @@ premier:
     monitoring:
       log_threshold: 0.5
 ```
+
+## Configuration Reference
+
+Premier supports extensive configuration options for path-based policies. Here's a complete reference of all available configuration fields:
+
+### Top-Level Configuration
+
+| Field | Type | Description | Default |
+|-------|------|-------------|---------|
+| `keyspace` | string | Namespace for cache keys and throttling | `"asgi-gateway"` |
+| `paths` | array | Path-specific configuration rules | `[]` |
+| `default_features` | object | Default features applied to all paths | `null` |
+| `servers` | array | Backend server URLs for standalone mode | `null` |
+
+### Path Configuration
+
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `pattern` | string | Path pattern (regex or glob-style) | `"/api/users/*"`, `"^/admin/.*$"` |
+| `features` | object | Features to apply to this path | See feature configuration below |
+
+### Feature Configuration
+
+#### Cache Configuration
+
+| Field | Type | Description | Default | Example |
+|-------|------|-------------|---------|---------|
+| `expire_s` | integer | Cache expiration in seconds | `null` (no expiration) | `300` |
+| `cache_key` | string/function | Custom cache key | Auto-generated | `"user:{user_id}"` |
+
+#### Rate Limiting Configuration
+
+| Field | Type | Description | Default | Example |
+|-------|------|-------------|---------|---------|
+| `quota` | integer | Number of requests allowed | Required | `100` |
+| `duration` | integer | Time window in seconds | Required | `60` |
+| `algorithm` | string | Rate limiting algorithm | `"fixed_window"` | `"sliding_window"`, `"token_bucket"`, `"leaky_bucket"` |
+| `bucket_size` | integer | Bucket size (for leaky_bucket) | Same as quota | `50` |
+| `error_status` | integer | HTTP status code for rate limit errors | `429` | `503` |
+| `error_message` | string | Error message for rate limit errors | `"Rate limit exceeded"` | `"Too many requests"` |
+
+#### Timeout Configuration
+
+| Field | Type | Description | Default | Example |
+|-------|------|-------------|---------|---------|
+| `seconds` | float | Timeout duration in seconds | Required | `5.0` |
+| `error_status` | integer | HTTP status code for timeout errors | `504` | `408` |
+| `error_message` | string | Error message for timeout errors | `"Request timeout"` | `"Request took too long"` |
+
+#### Retry Configuration
+
+| Field | Type | Description | Default | Example |
+|-------|------|-------------|---------|---------|
+| `max_attempts` | integer | Maximum retry attempts | `3` | `5` |
+| `wait` | float/array/function | Wait time between retries | `1.0` | `[1, 2, 4]` |
+| `exceptions` | array | Exception types to retry on | `[Exception]` | Custom exceptions |
+
+#### Circuit Breaker Configuration
+
+| Field | Type | Description | Default | Example |
+|-------|------|-------------|---------|---------|
+| `failure_threshold` | integer | Failures before opening circuit | `5` | `10` |
+| `recovery_timeout` | float | Seconds before attempting recovery | `60.0` | `120.0` |
+| `expected_exception` | string | Exception type that triggers circuit | `"Exception"` | `"ConnectionError"` |
+
+#### Monitoring Configuration
+
+| Field | Type | Description | Default | Example |
+|-------|------|-------------|---------|---------|
+| `log_threshold` | float | Log requests taking longer than this (seconds) | `0.1` | `1.0` |
+
+### Complete Configuration Example
+
+```yaml
+premier:
+  keyspace: "production-api"
+  servers: ["http://backend1:8000", "http://backend2:8000"]
+  
+  paths:
+    - pattern: "/api/users/*"
+      features:
+        cache:
+          expire_s: 300
+        rate_limit:
+          quota: 1000
+          duration: 60
+          algorithm: "sliding_window"
+          error_status: 429
+          error_message: "Rate limit exceeded for user API"
+        timeout:
+          seconds: 5.0
+          error_status: 504
+          error_message: "User API timeout"
+        retry:
+          max_attempts: 3
+          wait: [1, 2, 4]  # Exponential backoff
+        circuit_breaker:
+          failure_threshold: 5
+          recovery_timeout: 60.0
+        monitoring:
+          log_threshold: 0.1
+          
+    - pattern: "/api/admin/*"
+      features:
+        rate_limit:
+          quota: 10
+          duration: 60
+          algorithm: "token_bucket"
+          error_status: 403
+          error_message: "Admin API rate limit exceeded"
+        timeout:
+          seconds: 30.0
+          error_status: 408
+          error_message: "Admin operation timeout"
+        monitoring:
+          log_threshold: 0.5
+          
+  default_features:
+    timeout:
+      seconds: 10.0
+    rate_limit:
+      quota: 100
+      duration: 60
+      algorithm: "fixed_window"
+    monitoring:
+      log_threshold: 1.0
+```
+
+### Algorithm Options
+
+- **`fixed_window`**: Simple time-based windows
+- **`sliding_window`**: Smooth rate limiting over time
+- **`token_bucket`**: Burst capacity with steady refill rate
+- **`leaky_bucket`**: Queue-based rate limiting with controlled draining
 
 ## Installation
 

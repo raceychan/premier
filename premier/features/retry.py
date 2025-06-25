@@ -7,7 +7,8 @@ from typing import Awaitable, Optional, TypeVar, Union
 from typing_extensions import assert_never
 
 from premier.interface import P
-from premier.timer import ILogger
+from premier.features.timer import ILogger
+from premier.features.retry_errors import CircuitBreakerOpenError
 
 T = TypeVar("T")
 
@@ -137,7 +138,7 @@ class CircuitBreaker:
                 if self._should_attempt_reset():
                     self.state = "HALF_OPEN"
                 else:
-                    raise CircuitBreakerOpenException(
+                    raise CircuitBreakerOpenError(
                         f"Circuit breaker is OPEN. Last failure: {self.last_failure_time}"
                     )
             
@@ -171,6 +172,5 @@ class CircuitBreaker:
             self.state = "OPEN"
 
 
-class CircuitBreakerOpenException(Exception):
-    """Exception raised when circuit breaker is open."""
-    pass
+# Use CircuitBreakerOpenError from retry_errors.py instead
+CircuitBreakerOpenException = CircuitBreakerOpenError  # Backward compatibility alias

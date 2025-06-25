@@ -3,7 +3,7 @@ import pytest
 import time
 from unittest.mock import AsyncMock
 
-from premier.retry import CircuitBreaker, CircuitBreakerOpenException
+from premier.features.retry import CircuitBreaker, CircuitBreakerOpenException
 
 
 class TestCircuitBreaker:

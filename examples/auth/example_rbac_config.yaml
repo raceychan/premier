@@ -1,0 +1,188 @@
+premier:
+  paths:
+    # Admin routes - require admin permissions
+    - pattern: "/api/admin/.*"
+      features:
+        auth:
+          type: "jwt"
+          secret: "your-secret-key"
+          algorithm: "HS256"
+          rbac:
+            roles:
+              admin:
+                description: "System Administrator"
+                permissions:
+                  - "*:*"
+              manager:
+                description: "User Manager"
+                permissions:
+                  - "read:*"
+                  - "write:users"
+                  - "manager:access"
+              user:
+                description: "Regular User"
+                permissions:
+                  - "read:users"
+                  - "write:profile"
+              guest:
+                description: "Guest User"
+                permissions:
+                  - "read:public"
+            
+            user_roles:
+              admin_user: ["admin"]
+              manager_user: ["manager"]
+              regular_user: ["user"]
+              guest_user: ["guest"]
+            
+            route_permissions:
+              "/api/admin/.*": ["admin:access"]
+              "/api/manager/.*": ["manager:access"]
+              "/api/users/.*": ["read:users"]
+              "/api/users/create": ["write:users"]
+              "/api/users/profile": ["write:profile"]
+            
+            default_role: "guest"
+            allow_any_permission: true
+    
+    # Manager routes - require manager permissions
+    - pattern: "/api/manager/.*"
+      features:
+        auth:
+          type: "jwt"
+          secret: "your-secret-key"
+          algorithm: "HS256"
+          rbac:
+            roles:
+              admin:
+                description: "System Administrator"
+                permissions:
+                  - "*:*"
+              manager:
+                description: "User Manager"
+                permissions:
+                  - "read:*"
+                  - "write:users"
+                  - "manager:access"
+              user:
+                description: "Regular User"
+                permissions:
+                  - "read:users"
+                  - "write:profile"
+              guest:
+                description: "Guest User"
+                permissions:
+                  - "read:public"
+            
+            user_roles:
+              admin_user: ["admin"]
+              manager_user: ["manager"]
+              regular_user: ["user"]
+              guest_user: ["guest"]
+            
+            route_permissions:
+              "/api/admin/.*": ["admin:access"]
+              "/api/manager/.*": ["manager:access"]
+              "/api/users/.*": ["read:users"]
+              "/api/users/create": ["write:users"]
+              "/api/users/profile": ["write:profile"]
+            
+            default_role: "guest"
+            allow_any_permission: true
+    
+    # User routes - require user permissions
+    - pattern: "/api/users/.*"
+      features:
+        auth:
+          type: "jwt"
+          secret: "your-secret-key"
+          algorithm: "HS256"
+          rbac:
+            roles:
+              admin:
+                description: "System Administrator"
+                permissions:
+                  - "*:*"
+              manager:
+                description: "User Manager"
+                permissions:
+                  - "read:*"
+                  - "write:users"
+                  - "manager:access"
+              user:
+                description: "Regular User"
+                permissions:
+                  - "read:users"
+                  - "write:profile"
+              guest:
+                description: "Guest User"
+                permissions:
+                  - "read:public"
+            
+            user_roles:
+              admin_user: ["admin"]
+              manager_user: ["manager"]
+              regular_user: ["user"]
+              guest_user: ["guest"]
+            
+            route_permissions:
+              "/api/admin/.*": ["admin:access"]
+              "/api/manager/.*": ["manager:access"]
+              "/api/users/.*": ["read:users"]
+              "/api/users/create": ["write:users"]
+              "/api/users/profile": ["write:profile"]
+            
+            default_role: "guest"
+            allow_any_permission: true
+    
+    # Public routes - no authentication required
+    - pattern: "/api/public/.*"
+      features: {}
+    
+    # Health check - no authentication required
+    - pattern: "/health"
+      features: {}
+
+  # Default features for all routes (optional)
+  default_features:
+    auth:
+      type: "jwt"
+      secret: "your-secret-key"
+      algorithm: "HS256"
+      rbac:
+        roles:
+          admin:
+            description: "System Administrator"
+            permissions:
+              - "*:*"
+          manager:
+            description: "User Manager"
+            permissions:
+              - "read:*"
+              - "write:users"
+              - "manager:access"
+          user:
+            description: "Regular User"
+            permissions:
+              - "read:users"
+              - "write:profile"
+          guest:
+            description: "Guest User"
+            permissions:
+              - "read:public"
+        
+        user_roles:
+          admin_user: ["admin"]
+          manager_user: ["manager"]
+          regular_user: ["user"]
+          guest_user: ["guest"]
+        
+        route_permissions:
+          "/api/admin/.*": ["admin:access"]
+          "/api/manager/.*": ["manager:access"]
+          "/api/users/.*": ["read:users"]
+          "/api/users/create": ["write:users"]
+          "/api/users/profile": ["write:profile"]
+        
+        default_role: "guest"
+        allow_any_permission: true

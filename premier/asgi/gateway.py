@@ -302,7 +302,7 @@ def apply_auth_wrapper(
     auth_handler = _get_auth_handler()
     
     async def auth_wrapper(scope: dict, receive: Callable, send: Callable):
-        """Authenticate request before proceeding."""
+        """Authenticate request and authorize access."""
         try:
             # Extract headers from scope
             headers = {}
@@ -315,15 +315,29 @@ def apply_auth_wrapper(
             # Add user info to scope for downstream handlers
             scope["user"] = user_info
             
+            # Check RBAC authorization if configured
+            if auth_config.rbac:
+                from ..features.auth.rbac import RBACHandler
+                rbac_handler = RBACHandler(auth_config.rbac)
+                path = scope.get("path", "")
+                method = scope.get("method", "GET")
+                
+                # Authorize access to the path
+                rbac_handler.authorize(user_info, path, method)
+            
             # Call downstream handler
             await handler(scope, receive, send)
             
         except Exception as e:
             # Import auth errors for handling
             from ..features.auth.errors import AuthError
+            from ..features.auth.rbac import RBACError
             
-            if isinstance(e, AuthError):
-                # Send 401 Unauthorized response
+            if isinstance(e, RBACError):
+                # Send 403 Forbidden response for authorization failures
+                await send_error_response(send, 403, str(e))
+            elif isinstance(e, AuthError):
+                # Send 401 Unauthorized response for authentication failures
                 await send_error_response(send, 401, str(e))
             else:
                 # Re-raise non-auth errors
@@ -534,6 +548,12 @@ class GatewayConfig:
                 if not auth_type:
                     raise ValueError("Auth configuration requires 'type' field")
                 
+                # Parse RBAC configuration if present
+                rbac_config = None
+                if "rbac" in auth_data:
+                    from ..features.auth.rbac import create_rbac_config_from_dict
+                    rbac_config = create_rbac_config_from_dict(auth_data["rbac"])
+                
                 auth = AuthConfig(
                     type=auth_type,
                     username=auth_data.get("username"),
@@ -548,6 +568,7 @@ class GatewayConfig:
                     verify_iat=auth_data.get("verify_iat", True),
                     verify_aud=auth_data.get("verify_aud", True),
                     verify_iss=auth_data.get("verify_iss", True),
+                    rbac=rbac_config,
                 )
             else:
                 # auth_data is True or other truthy value - invalid for auth

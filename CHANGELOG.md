@@ -5,11 +5,36 @@
 ### Major Features
 
 - **🔐 Authentication System** - Complete authentication framework with support for multiple auth types:
+- **🛡️ Role-Based Access Control (RBAC)** - Comprehensive RBAC system for fine-grained authorization:
+  - **Role and Permission Management** - Define roles with specific permissions
+  - **User-Role Mapping** - Assign roles to users dynamically
+  - **Route-Based Authorization** - Control access to specific routes based on permissions
+  - **Wildcard Permissions** - Support for wildcard permissions (e.g., `read:*`, `*:api`)
+  - **Default Role Assignment** - Automatic role assignment for users without explicit roles
+  - **Integration with Authentication** - Seamless integration with Basic and JWT authentication
+  - **Configuration-Driven** - Define RBAC rules in YAML configuration files
+
+- **🔐 Authentication System** - Complete authentication framework with support for multiple auth types:
   - **Basic Authentication** - Username/password authentication with Base64 encoding
   - **JWT Authentication** - JSON Web Token validation with configurable options
   - **Path-based Auth** - Different authentication requirements per endpoint pattern
   - **Public Endpoints** - Configurable paths that don't require authentication
   - **Lazy Loading** - JWT dependencies only loaded when needed (`pip install premier[jwt]`)
+
+### RBAC Configuration
+
+- **RBACConfig dataclass** - Comprehensive RBAC configuration system
+  - `roles`: Define roles with their associated permissions
+  - `user_roles`: Map users to their assigned roles
+  - `route_permissions`: Define which permissions are required for specific routes
+  - `default_role`: Automatic role assignment for users without explicit roles
+  - `allow_any_permission`: Permission matching strategy (ANY vs ALL)
+
+- **Role and Permission System** - Fine-grained access control
+  - **Permission Format**: `action:resource` (e.g., `read:api`, `write:users`)
+  - **Wildcard Support**: `*:api` (all actions on api), `read:*` (read all resources)
+  - **Role Inheritance**: Users can have multiple roles with combined permissions
+  - **Route Pattern Matching**: Regex patterns for flexible route protection
 
 ### Auth Configuration
 
@@ -17,6 +42,7 @@
   - `type`: Authentication type ("basic" or "jwt")
   - **Basic Auth options**: `username`, `password`
   - **JWT options**: `secret`, `algorithm`, `audience`, `issuer`, verification flags
+  - **RBAC options**: `rbac` - Role-Based Access Control configuration
   - **Validation**: Built-in validation for required fields based on auth type
 
 ### Gateway Integration
@@ -24,7 +50,8 @@
 - **Middleware Integration** - Auth runs early in the middleware pipeline (after timeout)
 - **Feature Compilation** - Auth handlers are pre-compiled for efficient execution
 - **User Context** - Authenticated user information added to ASGI scope for downstream handlers
-- **Error Handling** - Proper 401 Unauthorized responses for authentication failures
+- **RBAC Authorization** - Role-based access control runs after authentication
+- **Error Handling** - Proper 401 Unauthorized (auth failed) and 403 Forbidden (access denied) responses
 - **Configuration Parsing** - Supports both dict and boolean config values using MISSING sentinel pattern
 
 ### Example Usage
@@ -43,13 +70,39 @@ auth:
   algorithm: "HS256"
   audience: "your-app"
   verify_exp: true
+
+# JWT with RBAC
+auth:
+  type: jwt
+  secret: "your-jwt-secret"
+  algorithm: "HS256"
+  rbac:
+    roles:
+      admin:
+        description: "System Administrator"
+        permissions:
+          - "*:*"
+      user:
+        description: "Regular User"
+        permissions:
+          - "read:api"
+          - "write:profile"
+    user_roles:
+      admin_user: ["admin"]
+      regular_user: ["user"]
+    route_permissions:
+      "/api/admin/.*": ["admin:access"]
+      "/api/profile/.*": ["write:profile"]
+    default_role: "user"
 ```
 
 ### Testing & Examples
 
-- **Comprehensive Test Suite** - Unit tests for all auth handlers and configuration
+- **Comprehensive Test Suite** - Unit tests for all auth handlers and RBAC configuration
 - **Real Integration Tests** - Tests using actual JWT tokens and Base64 encoding (no mocking)
-- **Example Servers** - Ready-to-run example servers for Basic and JWT auth
+- **RBAC Test Suite** - 65 comprehensive tests covering roles, permissions, and authorization
+- **Example Servers** - Ready-to-run example servers for Basic, JWT, and RBAC auth
+- **YAML Configuration Examples** - Complete RBAC configuration examples
 - **Manual Testing Guide** - Complete curl commands and testing scenarios
 - **Generated Tokens** - Tests generate real tokens for manual verification
 
@@ -57,7 +110,10 @@ auth:
 
 - **Lazy Import Pattern** - JWT library (`pyjwt`) only imported when JWT auth is actually used
 - **Factory Pattern** - `create_auth_handler()` creates appropriate auth handler based on config
-- **Error Hierarchy** - Comprehensive error classes for different authentication failure types
+- **RBAC Architecture** - Modular RBAC system with pluggable role and permission management
+- **Permission Matching** - Efficient wildcard permission matching with regex support
+- **Route Pattern Matching** - Flexible route protection with regex patterns and specificity ordering
+- **Error Hierarchy** - Comprehensive error classes for authentication and authorization failures
 - **Type Safety** - Full type annotations and proper integration with existing types
 - **MISSING Sentinel** - Enhanced configuration parsing to distinguish between unset and empty config
 
@@ -67,12 +123,19 @@ auth:
 - `premier/features/auth/__init__.py` - Public API exports
 - `premier/features/auth/auth.py` - Core authentication handlers
 - `premier/features/auth/errors.py` - Authentication error classes
+- `premier/features/auth/rbac.py` - Role-Based Access Control implementation
 - `example_auth_server.py` - Basic auth example server
 - `example_jwt_server.py` - JWT auth example server
+- `example_rbac_server.py` - RBAC with Basic auth example server
+- `example_jwt_rbac_server.py` - RBAC with JWT auth example server
+- `example_rbac_yaml_server.py` - RBAC configured from YAML file
+- `example_rbac_config.yaml` - Complete RBAC configuration example
 - `tests/test_auth.py` - Unit tests for auth features
 - `tests/test_auth_integration.py` - Integration tests with mocking
 - `tests/test_auth_real_integration.py` - Real integration tests without mocking
 - `tests/test_gateway_auth.py` - Gateway auth integration tests
+- `tests/test_rbac.py` - Comprehensive RBAC unit tests (51 tests)
+- `tests/test_rbac_integration.py` - RBAC integration tests (14 tests)
 
 ### Dependencies
 

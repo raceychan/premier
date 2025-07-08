@@ -2,7 +2,7 @@ import base64
 import binascii
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional
 
 from .errors import (
     InvalidAuthHeaderError,
@@ -10,6 +10,7 @@ from .errors import (
     InvalidTokenError,
     MissingAuthHeaderError,
 )
+from .rbac import RBACConfig
 
 
 @dataclass
@@ -33,6 +34,9 @@ class AuthConfig:
     verify_iat: bool = True
     verify_aud: bool = True
     verify_iss: bool = True
+    
+    # RBAC options
+    rbac: Optional[RBACConfig] = None
 
     def __post_init__(self):
         if self.type == "basic" and (not self.username or not self.password):
@@ -80,7 +84,15 @@ class BasicAuth(AuthHandler):
             if username != self.config.username or password != self.config.password:
                 raise InvalidCredentialsError("Invalid username or password")
 
-            return {"username": username, "auth_type": "basic"}
+            user_info = {"username": username, "auth_type": "basic"}
+            
+            # Add RBAC information if configured
+            if self.config.rbac:
+                from .rbac import RBACHandler
+                rbac_handler = RBACHandler(self.config.rbac)
+                user_info = rbac_handler.get_user_context(user_info)
+
+            return user_info
 
         except (binascii.Error, UnicodeDecodeError):
             raise InvalidAuthHeaderError("Invalid base64 encoding")
@@ -132,9 +144,13 @@ class JWTAuth(AuthHandler):
             }
 
             # Decode JWT token
+            # secret is guaranteed to be not None by __post_init__ validation
+            secret = self.config.secret
+            assert secret is not None, "JWT secret must not be None"
+            
             payload = jwt_module.decode(
                 token,
-                self.config.secret,
+                secret,
                 algorithms=[self.config.algorithm],
                 audience=self.config.audience,
                 issuer=self.config.issuer,
@@ -143,6 +159,13 @@ class JWTAuth(AuthHandler):
 
             # Add auth type to payload
             payload["auth_type"] = "jwt"
+            
+            # Add RBAC information if configured
+            if self.config.rbac:
+                from .rbac import RBACHandler
+                rbac_handler = RBACHandler(self.config.rbac)
+                payload = rbac_handler.get_user_context(payload)
+
             return payload
 
         except jwt_module.InvalidSignatureError:

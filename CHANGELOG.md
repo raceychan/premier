@@ -1,5 +1,85 @@
 # CHANGELOG
 
+## version 0.4.11 (2025-01-08)
+
+### Major Features
+
+- **🔐 Authentication System** - Complete authentication framework with support for multiple auth types:
+  - **Basic Authentication** - Username/password authentication with Base64 encoding
+  - **JWT Authentication** - JSON Web Token validation with configurable options
+  - **Path-based Auth** - Different authentication requirements per endpoint pattern
+  - **Public Endpoints** - Configurable paths that don't require authentication
+  - **Lazy Loading** - JWT dependencies only loaded when needed (`pip install premier[jwt]`)
+
+### Auth Configuration
+
+- **AuthConfig dataclass** - Unified configuration for all authentication types
+  - `type`: Authentication type ("basic" or "jwt")
+  - **Basic Auth options**: `username`, `password`
+  - **JWT options**: `secret`, `algorithm`, `audience`, `issuer`, verification flags
+  - **Validation**: Built-in validation for required fields based on auth type
+
+### Gateway Integration
+
+- **Middleware Integration** - Auth runs early in the middleware pipeline (after timeout)
+- **Feature Compilation** - Auth handlers are pre-compiled for efficient execution
+- **User Context** - Authenticated user information added to ASGI scope for downstream handlers
+- **Error Handling** - Proper 401 Unauthorized responses for authentication failures
+- **Configuration Parsing** - Supports both dict and boolean config values using MISSING sentinel pattern
+
+### Example Usage
+
+```yaml
+# Basic Authentication
+auth:
+  type: basic
+  username: "admin"
+  password: "secret"
+
+# JWT Authentication  
+auth:
+  type: jwt
+  secret: "your-jwt-secret"
+  algorithm: "HS256"
+  audience: "your-app"
+  verify_exp: true
+```
+
+### Testing & Examples
+
+- **Comprehensive Test Suite** - Unit tests for all auth handlers and configuration
+- **Real Integration Tests** - Tests using actual JWT tokens and Base64 encoding (no mocking)
+- **Example Servers** - Ready-to-run example servers for Basic and JWT auth
+- **Manual Testing Guide** - Complete curl commands and testing scenarios
+- **Generated Tokens** - Tests generate real tokens for manual verification
+
+### Technical Implementation
+
+- **Lazy Import Pattern** - JWT library (`pyjwt`) only imported when JWT auth is actually used
+- **Factory Pattern** - `create_auth_handler()` creates appropriate auth handler based on config
+- **Error Hierarchy** - Comprehensive error classes for different authentication failure types
+- **Type Safety** - Full type annotations and proper integration with existing types
+- **MISSING Sentinel** - Enhanced configuration parsing to distinguish between unset and empty config
+
+### Files Added
+
+- `premier/features/auth/` - Complete authentication module
+- `premier/features/auth/__init__.py` - Public API exports
+- `premier/features/auth/auth.py` - Core authentication handlers
+- `premier/features/auth/errors.py` - Authentication error classes
+- `example_auth_server.py` - Basic auth example server
+- `example_jwt_server.py` - JWT auth example server
+- `tests/test_auth.py` - Unit tests for auth features
+- `tests/test_auth_integration.py` - Integration tests with mocking
+- `tests/test_auth_real_integration.py` - Real integration tests without mocking
+- `tests/test_gateway_auth.py` - Gateway auth integration tests
+
+### Dependencies
+
+- Added `pyjwt` as optional dependency: `pip install premier[jwt]`
+- Updated `pyproject.toml` with JWT optional dependency group
+- Added `pyjwt` to development dependencies for testing
+
 ## version 0.4.10 (2025-06-25)
 
 ### Features

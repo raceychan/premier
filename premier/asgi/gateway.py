@@ -4,18 +4,44 @@ import time
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, TypedDict, Union, TypeVar
 
 import yaml
 
 from ..dashboard import DashboardService
-from ..features.cache import Cache
 from ..features.retry import CircuitBreaker, retry
 from ..features.throttler import QuotaExceedsError, Throttler
 from ..features.throttler.handler import AsyncDefaultHandler
 from ..features.timer import ILogger
 from ..providers import AsyncCacheProvider, AsyncInMemoryCache
 from .loadbalancer import ILoadBalancer, RandomLoadBalancer
+
+
+class _Missed:
+    """Sentinel object to represent a missing configuration value."""
+    
+    def __bool__(self) -> bool:
+        return False
+    
+    def __repr__(self) -> str:
+        return "MISSING"
+
+
+MISSING = _Missed()
+T = TypeVar("T")
+Maybe = Union[T, _Missed]
+
+
+class FeaturesData(TypedDict, total=False):
+    """TypedDict for features configuration data."""
+
+    cache: Dict[str, Any]
+    retry: Dict[str, Any]
+    timeout: Dict[str, Any]
+    rate_limit: Dict[str, Any]
+    monitoring: Dict[str, Any]
+    circuit_breaker: Dict[str, Any]
+    auth: Dict[str, Any]
 
 
 @dataclass
@@ -78,6 +104,8 @@ class MonitoringConfig:
     log_threshold: float = 0.1
 
 
+# Import AuthConfig from auth feature
+from ..features.auth import AuthConfig
 
 
 async def send_error_response(
@@ -88,7 +116,7 @@ async def send_error_response(
         body = f'{{"error": "{message}"}}'.encode()
     else:
         body = message.encode()
-    
+
     await send(
         {
             "type": "http.response.start",
@@ -145,7 +173,9 @@ def apply_retry_wrapper(
 
 
 def apply_rate_limit(
-    handler: Callable, rate_limiter: Optional[Callable], rate_limit_config: Optional[RateLimitConfig]
+    handler: Callable,
+    rate_limiter: Optional[Callable],
+    rate_limit_config: Optional[RateLimitConfig],
 ) -> Callable:
     """Apply rate limiting wrapper to handler."""
     if rate_limiter is None:
@@ -159,7 +189,9 @@ def apply_rate_limit(
         except QuotaExceedsError:
             if rate_limit_config:
                 await send_error_response(
-                    send, rate_limit_config.error_status, rate_limit_config.error_message
+                    send,
+                    rate_limit_config.error_status,
+                    rate_limit_config.error_message,
                 )
             else:
                 await send_error_response(send, 429, "Rate limit exceeded")
@@ -255,6 +287,51 @@ def apply_circuit_breaker(
     return circuit_breaker(handler)
 
 
+def apply_auth_wrapper(
+    handler: Callable, auth_config: Optional[AuthConfig]
+) -> Callable:
+    """Apply authentication wrapper to handler."""
+    if auth_config is None:
+        return handler
+    
+    # Lazy import to avoid circular dependencies
+    def _get_auth_handler():
+        from ..features.auth import create_auth_handler
+        return create_auth_handler(auth_config)
+    
+    auth_handler = _get_auth_handler()
+    
+    async def auth_wrapper(scope: dict, receive: Callable, send: Callable):
+        """Authenticate request before proceeding."""
+        try:
+            # Extract headers from scope
+            headers = {}
+            for name, value in scope.get("headers", []):
+                headers[name.decode("latin-1").lower()] = value.decode("latin-1")
+            
+            # Authenticate request
+            user_info = await auth_handler.authenticate(headers)
+            
+            # Add user info to scope for downstream handlers
+            scope["user"] = user_info
+            
+            # Call downstream handler
+            await handler(scope, receive, send)
+            
+        except Exception as e:
+            # Import auth errors for handling
+            from ..features.auth.errors import AuthError
+            
+            if isinstance(e, AuthError):
+                # Send 401 Unauthorized response
+                await send_error_response(send, 401, str(e))
+            else:
+                # Re-raise non-auth errors
+                raise
+    
+    return auth_wrapper
+
+
 @dataclass
 class FeatureConfig:
     """Configuration for individual features that can be applied to a path."""
@@ -265,10 +342,12 @@ class FeatureConfig:
     timeout: Optional[TimeoutConfig] = None
     monitoring: Optional[MonitoringConfig] = None
     circuit_breaker: Optional[CircuitBreakerConfig] = None
+    auth: Optional[AuthConfig] = None
 
     # Compiled properties (set during feature compilation)
     rate_limiter: Optional[Callable[..., Any]] = field(default=None, init=False)
     circuit_breaker_instance: Optional[CircuitBreaker] = field(default=None, init=False)
+    auth_handler: Optional[Any] = field(default=None, init=False)
 
 
 @dataclass
@@ -370,12 +449,18 @@ class GatewayConfig:
         )
 
     @staticmethod
-    def _parse_features(features_data: Dict[str, Any]) -> FeatureConfig:
+    def _get_feature_config(features_data: FeaturesData, key: str) -> Maybe[Dict[str, Any]]:
+        """Get feature configuration with MISSING sentinel for unset values."""
+        if key not in features_data:
+            return MISSING
+        return features_data[key]
+
+    @staticmethod
+    def _parse_features(features_data: FeaturesData) -> FeatureConfig:
         """Parse features configuration from dictionary."""
         # Parse cache config
         cache = None
-        if "cache" in features_data:
-            cache_data = features_data["cache"]
+        if cache_data := features_data.get("cache"):
             cache = CacheConfig(
                 expire_s=cache_data.get("expire_s"),
                 cache_key=cache_data.get("cache_key"),
@@ -384,8 +469,7 @@ class GatewayConfig:
 
         # Parse retry config
         retry = None
-        if "retry" in features_data:
-            retry_data = features_data["retry"]
+        if retry_data := features_data.get("retry"):
             retry = RetryConfig(
                 max_attempts=retry_data.get("max_attempts", 3),
                 wait=retry_data.get("wait", 1.0),
@@ -398,8 +482,7 @@ class GatewayConfig:
 
         # Parse timeout config
         timeout = None
-        if "timeout" in features_data:
-            timeout_data = features_data["timeout"]
+        if timeout_data := features_data.get("timeout"):
             timeout = TimeoutConfig(
                 seconds=timeout_data["seconds"],
                 logger=None,  # Logger instances can't be serialized in TOML
@@ -409,34 +492,66 @@ class GatewayConfig:
 
         # Parse rate limit config
         rate_limit = None
-        if "rate_limit" in features_data:
-            rate_limit_data = features_data["rate_limit"]
+        if rate_limit_data := features_data.get("rate_limit"):
             rate_limit = RateLimitConfig(
                 quota=rate_limit_data["quota"],
                 duration=rate_limit_data["duration"],
                 algorithm=rate_limit_data.get("algorithm", "fixed_window"),
                 bucket_size=rate_limit_data.get("bucket_size"),
                 error_status=rate_limit_data.get("error_status", 429),
-                error_message=rate_limit_data.get("error_message", "Rate limit exceeded"),
+                error_message=rate_limit_data.get(
+                    "error_message", "Rate limit exceeded"
+                ),
             )
 
         # Parse monitoring config
         monitoring = None
-        if "monitoring" in features_data:
-            monitoring_data = features_data["monitoring"]
+        if monitoring_data := features_data.get("monitoring"):
             monitoring = MonitoringConfig(
                 log_threshold=monitoring_data.get("log_threshold", 0.1)
             )
 
         # Parse circuit breaker config
         circuit_breaker = None
-        if "circuit_breaker" in features_data:
-            cb_data = features_data["circuit_breaker"]
-            circuit_breaker = CircuitBreakerConfig(
-                failure_threshold=cb_data.get("failure_threshold", 5),
-                recovery_timeout=cb_data.get("recovery_timeout", 60.0),
-                expected_exception=Exception,  # Can't serialize exception types in YAML
-            )
+        cb_data = GatewayConfig._get_feature_config(features_data, "circuit_breaker")
+        if cb_data is not MISSING:
+            if isinstance(cb_data, dict):
+                circuit_breaker = CircuitBreakerConfig(
+                    failure_threshold=cb_data.get("failure_threshold", 5),
+                    recovery_timeout=cb_data.get("recovery_timeout", 60.0),
+                    expected_exception=Exception,  # Can't serialize exception types in YAML
+                )
+            else:
+                # cb_data is True or other truthy value (enable with defaults)
+                circuit_breaker = CircuitBreakerConfig()
+
+        # Parse auth config
+        auth = None
+        auth_data = GatewayConfig._get_feature_config(features_data, "auth")
+        if auth_data is not MISSING:
+            if isinstance(auth_data, dict):
+                auth_type = auth_data.get("type")
+                if not auth_type:
+                    raise ValueError("Auth configuration requires 'type' field")
+                
+                auth = AuthConfig(
+                    type=auth_type,
+                    username=auth_data.get("username"),
+                    password=auth_data.get("password"),
+                    secret=auth_data.get("secret"),
+                    algorithm=auth_data.get("algorithm", "HS256"),
+                    audience=auth_data.get("audience"),
+                    issuer=auth_data.get("issuer"),
+                    verify_signature=auth_data.get("verify_signature", True),
+                    verify_exp=auth_data.get("verify_exp", True),
+                    verify_nbf=auth_data.get("verify_nbf", True),
+                    verify_iat=auth_data.get("verify_iat", True),
+                    verify_aud=auth_data.get("verify_aud", True),
+                    verify_iss=auth_data.get("verify_iss", True),
+                )
+            else:
+                # auth_data is True or other truthy value - invalid for auth
+                raise ValueError("Auth configuration requires a dictionary with 'type' field")
 
         return FeatureConfig(
             cache=cache,
@@ -445,6 +560,7 @@ class GatewayConfig:
             rate_limit=rate_limit,
             monitoring=monitoring,
             circuit_breaker=circuit_breaker,
+            auth=auth,
         )
 
 
@@ -572,6 +688,14 @@ class ASGIGateway:
             )
             compiled.circuit_breaker_instance = circuit_breaker
 
+        # Compile auth handler
+        if feature_config.auth is not None:
+            # Lazy import to avoid circular dependencies
+            from ..features.auth import create_auth_handler
+            
+            auth_handler = create_auth_handler(feature_config.auth)
+            compiled.auth_handler = auth_handler
+
         return compiled
 
     def _match_path(self, path: str) -> Optional[FeatureConfig]:
@@ -608,12 +732,15 @@ class ASGIGateway:
         # Apply features in reverse order since each wraps the previous
         handler = apply_monitoring(handler, feature_config.monitoring)
         handler = apply_cache(handler, feature_config.cache, self._cache_provider)
-        handler = apply_rate_limit(handler, feature_config.rate_limiter, feature_config.rate_limit)
+        handler = apply_rate_limit(
+            handler, feature_config.rate_limiter, feature_config.rate_limit
+        )
         handler = apply_circuit_breaker(
             handler, feature_config.circuit_breaker_instance
         )
         handler = apply_retry_wrapper(handler, feature_config.retry)
         handler = apply_timeout(handler, feature_config.timeout)
+        handler = apply_auth_wrapper(handler, feature_config.auth)
 
         # Add stats tracking wrapper
         handler = self._apply_stats_tracking(handler)

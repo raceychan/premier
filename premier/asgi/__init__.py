@@ -7,6 +7,7 @@ including caching, rate limiting, retry logic, timeouts, and monitoring.
 
 from .gateway import (
     ASGIGateway,
+    AuthConfig,
     CacheConfig,
     CircuitBreakerConfig,
     FeatureConfig,
@@ -25,6 +26,7 @@ __all__ = [
     "ASGIGateway",
     "GatewayConfig",
     # Configuration classes
+    "AuthConfig",
     "CacheConfig",
     "CircuitBreakerConfig",
     "FeatureConfig",

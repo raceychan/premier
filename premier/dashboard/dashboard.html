@@ -142,7 +142,8 @@
         }
 
         .form-group input,
-        .form-group select {
+        .form-group select,
+        .form-group textarea {
             width: 100%;
             padding: 0.5rem 0.75rem;
             border: 1px solid #e4e4e7;
@@ -150,10 +151,19 @@
             font-size: 0.875rem;
             transition: border-color 0.2s;
             background: #ffffff;
+            font-family: inherit;
+        }
+
+        .form-group textarea {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.8rem;
+            resize: vertical;
+            min-height: 60px;
         }
 
         .form-group input:focus,
-        .form-group select:focus {
+        .form-group select:focus,
+        .form-group textarea:focus {
             outline: none;
             border-color: #09090b;
             box-shadow: 0 0 0 2px rgba(9, 9, 11, 0.1);
@@ -562,6 +572,12 @@
             border-color: #c4b5fd;
         }
 
+        .feature-badge-auth {
+            background: #fef3c7;
+            color: #92400e;
+            border-color: #fbbf24;
+        }
+
         .feature-badge-icon {
             width: 12px;
             height: 12px;
@@ -859,7 +875,7 @@
             const container = document.getElementById(containerId);
             if (!container) return;
 
-            const featureTypes = ['cache', 'rate_limit', 'timeout', 'retry', 'monitoring'];
+            const featureTypes = ['cache', 'rate_limit', 'timeout', 'retry', 'monitoring', 'auth'];
 
             container.innerHTML = featureTypes.map(featureType => {
                 const featureConfig = features[featureType] || {};
@@ -1051,6 +1067,111 @@
                             <input type="number" id="${featureId}-log-threshold" value="${featureConfig.log_threshold || 0.1}" min="0.01" step="0.01">
                         </div>
                     `;
+                case 'auth':
+                    return `
+                        <div class="form-group">
+                            <label>Authentication Type</label>
+                            <select id="${featureId}-type" onchange="toggleAuthType('${featureId}')">
+                                <option value="basic" ${featureConfig.type === 'basic' ? 'selected' : ''}>Basic Authentication</option>
+                                <option value="jwt" ${featureConfig.type === 'jwt' ? 'selected' : ''}>JWT Authentication</option>
+                            </select>
+                        </div>
+                        
+                        <div id="${featureId}-basic-config" style="display: ${featureConfig.type === 'basic' ? 'block' : 'none'};">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Username</label>
+                                    <input type="text" id="${featureId}-username" value="${featureConfig.username || ''}" placeholder="Username">
+                                </div>
+                                <div class="form-group">
+                                    <label>Password</label>
+                                    <input type="password" id="${featureId}-password" value="${featureConfig.password || ''}" placeholder="Password">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="${featureId}-jwt-config" style="display: ${featureConfig.type === 'jwt' || !featureConfig.type ? 'block' : 'none'};">
+                            <div class="form-group">
+                                <label>Secret Key</label>
+                                <input type="password" id="${featureId}-secret" value="${featureConfig.secret || ''}" placeholder="JWT Secret Key">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Algorithm</label>
+                                    <select id="${featureId}-algorithm">
+                                        <option value="HS256" ${featureConfig.algorithm === 'HS256' ? 'selected' : ''}>HS256</option>
+                                        <option value="HS384" ${featureConfig.algorithm === 'HS384' ? 'selected' : ''}>HS384</option>
+                                        <option value="HS512" ${featureConfig.algorithm === 'HS512' ? 'selected' : ''}>HS512</option>
+                                        <option value="RS256" ${featureConfig.algorithm === 'RS256' ? 'selected' : ''}>RS256</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Audience (optional)</label>
+                                    <input type="text" id="${featureId}-audience" value="${featureConfig.audience || ''}" placeholder="JWT Audience">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Issuer (optional)</label>
+                                    <input type="text" id="${featureId}-issuer" value="${featureConfig.issuer || ''}" placeholder="JWT Issuer">
+                                </div>
+                            </div>
+                            
+                            <div class="feature-section">
+                                <h5>JWT Verification Options</h5>
+                                <div class="form-row">
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="${featureId}-verify-signature" ${featureConfig.verify_signature !== false ? 'checked' : ''}>
+                                        <label for="${featureId}-verify-signature">Verify Signature</label>
+                                    </div>
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="${featureId}-verify-exp" ${featureConfig.verify_exp !== false ? 'checked' : ''}>
+                                        <label for="${featureId}-verify-exp">Verify Expiration</label>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="${featureId}-verify-aud" ${featureConfig.verify_aud !== false ? 'checked' : ''}>
+                                        <label for="${featureId}-verify-aud">Verify Audience</label>
+                                    </div>
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="${featureId}-verify-iss" ${featureConfig.verify_iss !== false ? 'checked' : ''}>
+                                        <label for="${featureId}-verify-iss">Verify Issuer</label>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="feature-section">
+                                <h5>RBAC Configuration (optional)</h5>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="${featureId}-enable-rbac" onchange="toggleRBAC('${featureId}')" ${featureConfig.rbac ? 'checked' : ''}>
+                                    <label for="${featureId}-enable-rbac">Enable Role-Based Access Control</label>
+                                </div>
+                                <div id="${featureId}-rbac-config" style="display: ${featureConfig.rbac ? 'block' : 'none'};">
+                                    <div class="form-group">
+                                        <label>Default Role</label>
+                                        <input type="text" id="${featureId}-default-role" value="${featureConfig.rbac?.default_role || 'user'}" placeholder="Default role for authenticated users">
+                                    </div>
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="${featureId}-allow-any-permission" ${featureConfig.rbac?.allow_any_permission !== false ? 'checked' : ''}>
+                                        <label for="${featureId}-allow-any-permission">Allow Any Permission Match</label>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Roles Configuration (JSON)</label>
+                                        <textarea id="${featureId}-roles" rows="4" placeholder='{"admin": {"permissions": ["*:*"]}, "user": {"permissions": ["read:users"]}}'>${JSON.stringify(featureConfig.rbac?.roles || {}, null, 2)}</textarea>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>User Roles Mapping (JSON)</label>
+                                        <textarea id="${featureId}-user-roles" rows="3" placeholder='{"admin_user": ["admin"], "regular_user": ["user"]}'>${JSON.stringify(featureConfig.rbac?.user_roles || {}, null, 2)}</textarea>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Route Permissions (JSON)</label>
+                                        <textarea id="${featureId}-route-permissions" rows="3" placeholder='{"/api/admin/.*": ["admin:access"], "/api/users": ["read:users"]}'>${JSON.stringify(featureConfig.rbac?.route_permissions || {}, null, 2)}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
                 default:
                     return '';
             }
@@ -1082,6 +1203,26 @@
             const checkbox = document.getElementById(`${containerId}-${featureType}`);
             const section = document.getElementById(`${containerId}-${featureType}-section`);
             section.style.display = checkbox.checked ? 'block' : 'none';
+        }
+
+        function toggleAuthType(featureId) {
+            const authType = document.getElementById(`${featureId}-type`).value;
+            const basicConfig = document.getElementById(`${featureId}-basic-config`);
+            const jwtConfig = document.getElementById(`${featureId}-jwt-config`);
+            
+            if (authType === 'basic') {
+                basicConfig.style.display = 'block';
+                jwtConfig.style.display = 'none';
+            } else {
+                basicConfig.style.display = 'none';
+                jwtConfig.style.display = 'block';
+            }
+        }
+
+        function toggleRBAC(featureId) {
+            const checkbox = document.getElementById(`${featureId}-enable-rbac`);
+            const rbacConfig = document.getElementById(`${featureId}-rbac-config`);
+            rbacConfig.style.display = checkbox.checked ? 'block' : 'none';
         }
 
         function addPathConfig() {
@@ -1240,7 +1381,7 @@
         function collectCollapsibleFeatures(containerId) {
             const features = {};
 
-            ['cache', 'rate_limit', 'timeout', 'retry', 'monitoring'].forEach(featureType => {
+            ['cache', 'rate_limit', 'timeout', 'retry', 'monitoring', 'auth'].forEach(featureType => {
                 const feature = {};
                 const featureId = `${containerId}-${featureType}`;
 
@@ -1280,6 +1421,78 @@
                     if (logThresholdInput && logThresholdInput.value) feature.log_threshold = parseFloat(logThresholdInput.value);
                 }
 
+                else if (featureType === 'auth') {
+                    const typeInput = document.getElementById(`${featureId}-type`);
+                    if (typeInput && typeInput.value) {
+                        feature.type = typeInput.value;
+                        
+                        if (typeInput.value === 'basic') {
+                            const usernameInput = document.getElementById(`${featureId}-username`);
+                            const passwordInput = document.getElementById(`${featureId}-password`);
+                            if (usernameInput && usernameInput.value) feature.username = usernameInput.value;
+                            if (passwordInput && passwordInput.value) feature.password = passwordInput.value;
+                        } else if (typeInput.value === 'jwt') {
+                            const secretInput = document.getElementById(`${featureId}-secret`);
+                            const algorithmInput = document.getElementById(`${featureId}-algorithm`);
+                            const audienceInput = document.getElementById(`${featureId}-audience`);
+                            const issuerInput = document.getElementById(`${featureId}-issuer`);
+                            
+                            if (secretInput && secretInput.value) feature.secret = secretInput.value;
+                            if (algorithmInput && algorithmInput.value) feature.algorithm = algorithmInput.value;
+                            if (audienceInput && audienceInput.value) feature.audience = audienceInput.value;
+                            if (issuerInput && issuerInput.value) feature.issuer = issuerInput.value;
+                            
+                            // JWT verification options
+                            const verifySignatureInput = document.getElementById(`${featureId}-verify-signature`);
+                            const verifyExpInput = document.getElementById(`${featureId}-verify-exp`);
+                            const verifyAudInput = document.getElementById(`${featureId}-verify-aud`);
+                            const verifyIssInput = document.getElementById(`${featureId}-verify-iss`);
+                            
+                            if (verifySignatureInput) feature.verify_signature = verifySignatureInput.checked;
+                            if (verifyExpInput) feature.verify_exp = verifyExpInput.checked;
+                            if (verifyAudInput) feature.verify_aud = verifyAudInput.checked;
+                            if (verifyIssInput) feature.verify_iss = verifyIssInput.checked;
+                            
+                            // RBAC configuration
+                            const enableRbacInput = document.getElementById(`${featureId}-enable-rbac`);
+                            if (enableRbacInput && enableRbacInput.checked) {
+                                const rbac = {};
+                                
+                                const defaultRoleInput = document.getElementById(`${featureId}-default-role`);
+                                const allowAnyPermissionInput = document.getElementById(`${featureId}-allow-any-permission`);
+                                const rolesInput = document.getElementById(`${featureId}-roles`);
+                                const userRolesInput = document.getElementById(`${featureId}-user-roles`);
+                                const routePermissionsInput = document.getElementById(`${featureId}-route-permissions`);
+                                
+                                if (defaultRoleInput && defaultRoleInput.value) rbac.default_role = defaultRoleInput.value;
+                                if (allowAnyPermissionInput) rbac.allow_any_permission = allowAnyPermissionInput.checked;
+                                
+                                try {
+                                    if (rolesInput && rolesInput.value.trim()) rbac.roles = JSON.parse(rolesInput.value);
+                                } catch (e) {
+                                    console.warn('Invalid roles JSON:', e);
+                                }
+                                
+                                try {
+                                    if (userRolesInput && userRolesInput.value.trim()) rbac.user_roles = JSON.parse(userRolesInput.value);
+                                } catch (e) {
+                                    console.warn('Invalid user roles JSON:', e);
+                                }
+                                
+                                try {
+                                    if (routePermissionsInput && routePermissionsInput.value.trim()) rbac.route_permissions = JSON.parse(routePermissionsInput.value);
+                                } catch (e) {
+                                    console.warn('Invalid route permissions JSON:', e);
+                                }
+                                
+                                if (Object.keys(rbac).length > 0) {
+                                    feature.rbac = rbac;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if (Object.keys(feature).length > 0) {
                     features[featureType] = feature;
                 }
@@ -1291,7 +1504,7 @@
         function collectCheckboxFeatures(containerId) {
             const features = {};
 
-            ['cache', 'rate_limit', 'timeout', 'retry', 'monitoring'].forEach(featureType => {
+            ['cache', 'rate_limit', 'timeout', 'retry', 'monitoring', 'auth'].forEach(featureType => {
                 const checkbox = document.getElementById(`${containerId}-${featureType}`);
                 if (checkbox && checkbox.checked) {
                     const feature = {};
@@ -1627,7 +1840,8 @@
                 'rate_limit': '🛡️',
                 'timeout': '⏱️',
                 'retry': '🔄',
-                'monitoring': '📊'
+                'monitoring': '📊',
+                'auth': '🔐'
             };
             
             const featureNames = {
@@ -1635,7 +1849,8 @@
                 'rate_limit': 'Rate Limit',
                 'timeout': 'Timeout',
                 'retry': 'Retry',
-                'monitoring': 'Monitoring'
+                'monitoring': 'Monitoring',
+                'auth': 'Authentication'
             };
             
             return features.map(feature => {
